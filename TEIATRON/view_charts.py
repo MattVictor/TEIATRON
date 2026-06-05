@@ -29,17 +29,17 @@ class ChartsExpandedPage(BaseExpandedPage):
         self.preview_widget = preview_widget
         self.generated_charts = {}
         
-        # Variáveis para armazenar o dataset vindo do treinamento
         self.current_dataset = None
         self.current_classes = None
+        self.current_conjuntos = None
         
         container = QWidget()
         layout = QHBoxLayout(container)
         
-        # --- PAINEL ESQUERDO: Lista + Checkboxes ---
+        # --- PAINEL ESQUERDO ---
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 10, 0)
+        left_layout.setContentsMargins(0, 0, 0, 0)
         
         lbl_list = QLabel("Gráficos Gerados:")
         lbl_list.setStyleSheet(f"color: {TEXT_PRIMARY}; font-weight: bold; font-size: 14px;")
@@ -54,7 +54,24 @@ class ChartsExpandedPage(BaseExpandedPage):
         self.list_widget.currentRowChanged.connect(self.display_chart)
         left_layout.addWidget(self.list_widget)
         
-        # Seção de Plotagem Customizada
+        # Filtros de Treino/Teste
+        lbl_filters = QLabel("Filtros de Exibição:")
+        lbl_filters.setStyleSheet(f"color: {WARNING_COLOR}; font-weight: bold; margin-top: 10px;")
+        left_layout.addWidget(lbl_filters)
+
+        self.chk_train = QCheckBox("Mostrar Treino (Círculos)")
+        self.chk_train.setChecked(True)
+        self.chk_train.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px;")
+        self.chk_train.stateChanged.connect(self.refresh_current_chart)
+        left_layout.addWidget(self.chk_train)
+
+        self.chk_test = QCheckBox("Mostrar Teste (Triângulos)")
+        self.chk_test.setChecked(True)
+        self.chk_test.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px;")
+        self.chk_test.stateChanged.connect(self.refresh_current_chart)
+        left_layout.addWidget(self.chk_test)
+
+        # Variáveis
         lbl_vars = QLabel("Variáveis (Selecione 2):")
         lbl_vars.setStyleSheet(f"color: {ACCENT_COLOR}; font-weight: bold; margin-top: 10px;")
         left_layout.addWidget(lbl_vars)
@@ -102,37 +119,31 @@ class ChartsExpandedPage(BaseExpandedPage):
     # ==========================================
     # LÓGICA DE DADOS E PLOTAGEM
     # ==========================================
-    def set_dataset(self, dataset, classes):
-        """Salva o dataset localmente para permitir plotagens customizadas."""
+    def set_dataset(self, dataset, classes, conjuntos):
         self.current_dataset = dataset
         self.current_classes = classes
+        self.current_conjuntos = conjuntos
 
     def plot_custom_chart(self):
-        """Valida as checkboxes e gera o gráfico se estiver tudo correto."""
         if not self.current_dataset:
             self.show_error_popup("Nenhum dado disponível. Importe os dados e treine o modelo primeiro.")
             return
             
         selected_chks = [chk for chk in self.checkboxes if chk.isChecked()]
-        
-        # VALIDAÇÃO: Exatamente 2 variáveis
         if len(selected_chks) != 2:
             self.show_error_popup("Por favor, selecione EXATAMENTE DUAS variáveis para plotar o gráfico.")
             return
             
-        # Extrai os dados
         x_key, y_key = selected_chks[0].text(), selected_chks[1].text()
         x_data = self.current_dataset[x_key]
         y_data = self.current_dataset[y_key]
         
         chart_name = f"Dispersão ({x_key} x {y_key})"
-        self.add_chart(chart_name, "Dispersão", x_data, y_data, self.current_classes)
+        self.add_chart(chart_name, "Dispersão", x_data, y_data, self.current_classes, self.current_conjuntos)
         
-        # Seleciona automaticamente o gráfico recém-criado na lista
         self.list_widget.setCurrentRow(self.list_widget.count() - 1)
 
     def show_error_popup(self, message):
-        """Exibe um pop-up de erro estilizado."""
         msg = QMessageBox(self)
         msg.setWindowTitle("Erro de Seleção")
         msg.setText(message)
@@ -144,8 +155,8 @@ class ChartsExpandedPage(BaseExpandedPage):
         """)
         msg.exec()
 
-    def add_chart(self, name, chart_type, x_data, y_data, classes=None):
-        self.generated_charts[name] = {"type": chart_type, "x": x_data, "y": y_data, "classes": classes}
+    def add_chart(self, name, chart_type, x_data, y_data, classes=None, conjuntos=None):
+        self.generated_charts[name] = {"type": chart_type, "x": x_data, "y": y_data, "classes": classes, "conjuntos": conjuntos}
         self.list_widget.addItem(name)
 
     def clear_charts(self):
@@ -155,6 +166,12 @@ class ChartsExpandedPage(BaseExpandedPage):
         self.preview_widget.clear()
         if self.legend is not None:
             self.legend.clear()
+
+    def refresh_current_chart(self):
+        """Redesenha o gráfico atual quando as checkboxes são alteradas."""
+        current_row = self.list_widget.currentRow()
+        if current_row >= 0:
+            self.display_chart(current_row)
 
     def display_chart(self, index):
         if index < 0 or index >= self.list_widget.count():
@@ -175,19 +192,31 @@ class ChartsExpandedPage(BaseExpandedPage):
         x = np.array(chart_info["x"])
         y = np.array(chart_info["y"])
         classes = chart_info["classes"]
+        conjuntos = chart_info.get("conjuntos", ["Treino"] * len(x)) # Prevenção de erro
+        
+        show_train = self.chk_train.isChecked()
+        show_test = self.chk_test.isChecked()
         
         if c_type == "Dispersão" and classes:
             unique_classes = list(sorted(set(classes)))
             for i, cls_name in enumerate(unique_classes):
-                indices = [j for j, c in enumerate(classes) if c == cls_name]
-                x_cls = x[indices]
-                y_cls = y[indices]
-                
                 color = CLASS_COLORS[i % len(CLASS_COLORS)]
                 brush = pg.mkBrush(color=color)
                 
-                self.plot_widget.plot(x_cls, y_cls, pen=None, symbol='o', symbolBrush=brush, symbolSize=8, name=str(cls_name))
-                self.preview_widget.plot(x_cls, y_cls, pen=None, symbol='o', symbolBrush=brush, symbolSize=4)
+                # PLOT DE TREINO
+                if show_train:
+                    idx_tr = [j for j, (c, conj) in enumerate(zip(classes, conjuntos)) if c == cls_name and conj == "Treino"]
+                    if idx_tr:
+                        self.plot_widget.plot(x[idx_tr], y[idx_tr], pen=None, symbol='o', symbolBrush=brush, symbolSize=8, name=f"{cls_name} (Treino)")
+                        self.preview_widget.plot(x[idx_tr], y[idx_tr], pen=None, symbol='o', symbolBrush=brush, symbolSize=4)
+                
+                # PLOT DE TESTE
+                if show_test:
+                    idx_ts = [j for j, (c, conj) in enumerate(zip(classes, conjuntos)) if c == cls_name and conj == "Teste"]
+                    if idx_ts:
+                        # symbol='t' gera o triângulo que diferencia visualmente
+                        self.plot_widget.plot(x[idx_ts], y[idx_ts], pen=None, symbol='t', symbolBrush=brush, symbolSize=9, name=f"{cls_name} (Teste)")
+                        self.preview_widget.plot(x[idx_ts], y[idx_ts], pen=None, symbol='t', symbolBrush=brush, symbolSize=4)
         else:
             pen = pg.mkPen(color=ACCENT_COLOR, width=3)
             self.plot_widget.plot(x, y, pen=pen)

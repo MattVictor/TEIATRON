@@ -1,10 +1,13 @@
+# view_input.py
 import csv
+import random
 from PyQt6.QtWidgets import (
-    QLabel, QWidget, QVBoxLayout, QPushButton, QDoubleSpinBox, 
+    QLabel, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QDoubleSpinBox, 
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, 
-    QFileDialog, QGridLayout, QMessageBox
+    QFileDialog, QGridLayout, QMessageBox, QSpinBox
 )
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor
 from config import TEXT_PRIMARY, ACCENT_COLOR, ACCENT_TEXT, WARNING_COLOR
 from base_components import BaseCard, BaseExpandedPage
 
@@ -57,6 +60,7 @@ class InputExpandedPage(BaseExpandedPage):
         container = QWidget()
         layout = QVBoxLayout(container)
 
+        # --- PAINEL DE INPUTS MANUAIS ---
         input_panel = QWidget()
         grid = QGridLayout(input_panel)
         self.inputs = {}
@@ -79,6 +83,7 @@ class InputExpandedPage(BaseExpandedPage):
             
         layout.addWidget(input_panel)
 
+        # --- BOTÃO IMPORTAR ---
         btn_import = QPushButton("📂 Importar Dataset (.csv)")
         btn_import.setStyleSheet(f"""
             QPushButton {{ background-color: #4CAF50; color: white; font-weight: bold; font-size: 14px; padding: 10px; border-radius: 5px; margin-top: 10px; }}
@@ -87,6 +92,7 @@ class InputExpandedPage(BaseExpandedPage):
         btn_import.clicked.connect(self.load_csv)
         layout.addWidget(btn_import)
 
+        # --- TABELA DE DADOS ---
         self.table = QTableWidget()
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -99,9 +105,41 @@ class InputExpandedPage(BaseExpandedPage):
         self.table.cellDoubleClicked.connect(self.on_table_double_click)
         layout.addWidget(self.table)
 
+        # --- NOVOS CONTROLES: ALEATORIZAÇÃO E DIVISÃO (TRAIN/TEST) ---
+        split_panel = QWidget()
+        split_layout = QHBoxLayout(split_panel)
+        split_layout.setContentsMargins(0, 10, 0, 0)
+
+        lbl_pct = QLabel("Porcentagem de Treino (%):")
+        lbl_pct.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px; font-weight: bold;")
+        
+        self.spin_pct = QSpinBox()
+        self.spin_pct.setRange(1, 99)
+        self.spin_pct.setValue(80) # Padrão 80% Treino / 20% Teste
+        self.spin_pct.setStyleSheet(f"background-color: #333; color: {TEXT_PRIMARY}; padding: 6px; font-size: 14px; font-weight: bold;")
+
+        btn_stratified = QPushButton("Aleatorizar por Classe")
+        btn_stratified.setStyleSheet(f"QPushButton {{ background-color: {ACCENT_COLOR}; color: {ACCENT_TEXT}; font-weight: bold; padding: 8px; border-radius: 4px; }} QPushButton:hover {{ background-color: #00B3CC; }}")
+        btn_stratified.clicked.connect(lambda: self.apply_split(stratified=True))
+
+        btn_global = QPushButton("Aleatorizar Tudo")
+        btn_global.setStyleSheet(f"QPushButton {{ background-color: #FF9800; color: {ACCENT_TEXT}; font-weight: bold; padding: 8px; border-radius: 4px; }} QPushButton:hover {{ background-color: #F57C00; }}")
+        btn_global.clicked.connect(lambda: self.apply_split(stratified=False))
+
+        split_layout.addWidget(lbl_pct)
+        split_layout.addWidget(self.spin_pct)
+        split_layout.addWidget(btn_stratified)
+        split_layout.addWidget(btn_global)
+        split_layout.addStretch()
+
+        layout.addWidget(split_panel)
+
         self.add_main_content(container)
         self.sync_to_card()
 
+    # ==========================================
+    # LÓGICA DE DADOS
+    # ==========================================
     def on_manual_input_change(self):
         if not hasattr(self, '_ignore_manual'):
             self.current_class = None
@@ -130,6 +168,84 @@ class InputExpandedPage(BaseExpandedPage):
             for j, val in enumerate(row_data):
                 self.table.setItem(i, j, QTableWidgetItem(val.strip()))
 
+    def apply_split(self, stratified):
+        """Aplica a aleatorização e divide entre Treino e Teste com base na SpinBox."""
+        rows = self.table.rowCount()
+        cols = self.table.columnCount()
+        
+        if rows == 0:
+            return
+
+        # 1. Extrair os cabeçalhos atuais
+        headers = []
+        for j in range(cols):
+            item = self.table.horizontalHeaderItem(j)
+            headers.append(item.text() if item else f"Col {j}")
+
+        # Identificar onde está a classe e verificar se já existe a coluna "Conjunto"
+        has_conjunto = "Conjunto" in headers
+        class_col_idx = cols - 2 if has_conjunto else cols - 1
+
+        if not has_conjunto:
+            headers.append("Conjunto")
+        
+        # 2. Extrair os dados de todas as linhas
+        all_data = []
+        for i in range(rows):
+            row_data = []
+            for j in range(cols):
+                row_data.append(self.table.item(i, j).text())
+            if not has_conjunto:
+                row_data.append("") # Espaço reservado para a nova coluna "Conjunto"
+            all_data.append(row_data)
+
+        train_ratio = self.spin_pct.value() / 100.0
+
+        # 3. Aplicar Lógica de Separação
+        if stratified:
+            # Agrupar por classe
+            groups = {}
+            for row in all_data:
+                c = row[class_col_idx]
+                if c not in groups:
+                    groups[c] = []
+                groups[c].append(row)
+            
+            final_data = []
+            for c, group in groups.items():
+                random.shuffle(group) # Embaralha DENTRO da classe
+                split_idx = int(len(group) * train_ratio)
+                for i, row in enumerate(group):
+                    row[-1] = "Treino" if i < split_idx else "Teste"
+                    final_data.append(row)
+            
+            # Reatribui all_data mantendo as classes agrupadas visualmente na tabela
+            all_data = final_data 
+        else:
+            random.shuffle(all_data) # Embaralha GLOBALMENTE ignorando classes
+            split_idx = int(len(all_data) * train_ratio)
+            for i, row in enumerate(all_data):
+                row[-1] = "Treino" if i < split_idx else "Teste"
+
+        # 4. Reescrever a tabela com os novos dados
+        self.table.clearContents()
+        self.table.setColumnCount(len(headers))
+        self.table.setHorizontalHeaderLabels(headers)
+        self.table.setRowCount(len(all_data))
+
+        for i, row in enumerate(all_data):
+            for j, val in enumerate(row):
+                item = QTableWidgetItem(val)
+                
+                # Destacar a coluna "Conjunto" com cores para visualização rápida
+                if j == len(headers) - 1:
+                    if val == "Treino":
+                        item.setForeground(QColor("#00E5FF")) # Ciano brilhante
+                    else:
+                        item.setForeground(QColor("#FFEA00")) # Amarelo brilhante
+                        
+                self.table.setItem(i, j, item)
+
     def on_table_double_click(self, row, column):
         col_count = self.table.columnCount()
         self._ignore_manual = True
@@ -142,7 +258,10 @@ class InputExpandedPage(BaseExpandedPage):
                     val = float(raw_text.replace(',', '.'))
                     self.inputs[key].setValue(val)
 
-            if col_count >= 5:
+            # Para capturar a classe, consideramos a 5ª coluna ou a penúltima caso 'Conjunto' tenha sido criado
+            if col_count >= 6:
+                self.current_class = self.table.item(row, 4).text()
+            elif col_count >= 5:
                 self.current_class = self.table.item(row, 4).text()
             else:
                 self.current_class = None
@@ -169,15 +288,24 @@ class InputExpandedPage(BaseExpandedPage):
         self.update_card_callback(preview)
 
     def get_full_dataset(self):
-        """Retorna o dataset completo (Dicionário com as 4 colunas) e as classes."""
+        """Retorna o dataset completo, as classes e as marcações de Treino/Teste."""
         rows = self.table.rowCount()
         cols = self.table.columnCount()
         if rows == 0:
-            return None, None
+            return None, None, None
             
         keys = ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"]
         dataset = {key: [] for key in keys}
         class_data = []
+        conjunto_data = [] # Nova lista para Treino/Teste
+
+        # Verifica se a coluna Conjunto existe
+        headers = []
+        for j in range(cols):
+            item = self.table.horizontalHeaderItem(j)
+            headers.append(item.text() if item else "")
+        has_conjunto = "Conjunto" in headers
+        conj_idx = headers.index("Conjunto") if has_conjunto else -1
 
         for i in range(rows):
             try:
@@ -186,18 +314,24 @@ class InputExpandedPage(BaseExpandedPage):
                         val = float(self.table.item(i, j).text().replace(',', '.'))
                         dataset[key].append(val)
                     else:
-                        dataset[key].append(0.0) # Fallback seguro
+                        dataset[key].append(0.0)
                 
-                # A classe geralmente fica na 5ª coluna
-                if cols >= 5:
+                # Coleta a Classe
+                if cols >= 6:
+                    c = self.table.item(i, 4).text().strip()
+                elif cols >= 5:
                     c = self.table.item(i, 4).text().strip()
                 elif cols > 2:
                     c = self.table.item(i, cols-1).text().strip()
                 else:
                     c = "Desconhecida"
                     
+                # Coleta o Conjunto (Se não foi dividido, assume tudo como Treino)
+                conj = self.table.item(i, conj_idx).text().strip() if has_conjunto else "Treino"
+                    
                 class_data.append(c)
+                conjunto_data.append(conj)
             except Exception:
                 pass
                 
-        return dataset, class_data
+        return dataset, class_data, conjunto_data

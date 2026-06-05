@@ -73,11 +73,11 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.page_algo)     # Index 3
         self.stack.addWidget(self.page_accuracy) # Index 4
 
-    # NOVO MÉTODO DE TREINAMENTO
     def train_model(self):
         msg = QMessageBox(self)
         msg.setWindowTitle("Treinamento Concluído")
         msg.setText("Modelo treinado com sucesso!")
+        
         msg.setStyleSheet("""
             QMessageBox { background-color: #1E1E1E; color: #FFFFFF; }
             QLabel { color: #FFFFFF; font-size: 14px; }
@@ -85,18 +85,17 @@ class MainWindow(QMainWindow):
         """)
         msg.exec()
 
-        # Busca o dicionário completo e a lista de classes
-        dataset, class_data = self.page_input.get_full_dataset()
+        # Recebe a terceira variável (Conjunto)
+        dataset, class_data, conjunto_data = self.page_input.get_full_dataset()
         
         if dataset and class_data:
             self.page_charts.clear_charts()
-            self.page_charts.set_dataset(dataset, class_data)
+            self.page_charts.set_dataset(dataset, class_data, conjunto_data)
             
-            # Para manter a agilidade, deixamos o primeiro gráfico pré-selecionado e plotado!
-            self.page_charts.checkboxes[0].setChecked(True) # Sepal Length
-            self.page_charts.checkboxes[1].setChecked(True) # Sepal Width
+            self.page_charts.checkboxes[0].setChecked(True) 
+            self.page_charts.checkboxes[1].setChecked(True) 
             self.page_charts.plot_custom_chart()
-
+            
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     setup_pyqtgraph() 
