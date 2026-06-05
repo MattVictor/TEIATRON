@@ -39,7 +39,7 @@ class ChartsExpandedPage(BaseExpandedPage):
         # --- PAINEL ESQUERDO: Lista + Checkboxes ---
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setContentsMargins(0, 0, 10, 0)
         
         lbl_list = QLabel("Gráficos Gerados:")
         lbl_list.setStyleSheet(f"color: {TEXT_PRIMARY}; font-weight: bold; font-size: 14px;")

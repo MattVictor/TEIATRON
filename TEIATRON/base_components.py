@@ -38,25 +38,66 @@ class BaseCard(QFrame):
         self.layout.addWidget(widget, stretch=1)
 
 class BaseExpandedPage(QWidget):
-    """Molde base para as Páginas Expandidas."""
+    """Molde base: Agora simula um 'Card Gigante' expandido."""
     def __init__(self, title, on_back_callback):
         super().__init__()
-        self.layout = QVBoxLayout(self)
         
-        btn_back = QPushButton("← Voltar")
-        btn_back.setFixedSize(120, 35)
-        btn_back.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        btn_back.setStyleSheet(f"""
-            QPushButton {{ background-color: #333333; color: {TEXT_PRIMARY}; border-radius: 6px; }}
-            QPushButton:hover {{ background-color: #444444; color: {ACCENT_COLOR}; }}
+        # Layout da página inteira (com margens para separar o card da borda da janela)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        
+        # Criando o frame que simula o Card Expandido
+        self.card_frame = QFrame()
+        self.card_frame.setObjectName("ExpandedCard")
+        self.card_frame.setStyleSheet(f"""
+            QFrame#ExpandedCard {{ 
+                background-color: {BG_CARD}; 
+                border: 2px solid {ACCENT_COLOR}; 
+                border-radius: 12px; 
+            }}
         """)
-        btn_back.clicked.connect(on_back_callback)
-        self.layout.addWidget(btn_back)
-
+        
+        # Layout interno do card
+        self.card_layout = QVBoxLayout(self.card_frame)
+        self.card_layout.setContentsMargins(25, 25, 25, 25)
+        
+        # Barra Superior: Título na esquerda, Botão '-' na direita
+        top_bar = QHBoxLayout()
+        
         title_label = QLabel(title)
         title_label.setFont(QFont("Segoe UI", 20, QFont.Weight.Bold))
-        title_label.setStyleSheet(f"color: {ACCENT_COLOR}; margin-bottom: 10px;")
-        self.layout.addWidget(title_label)
+        title_label.setStyleSheet(f"color: {ACCENT_COLOR}; border: none;") 
+        
+        btn_collapse = QPushButton("-")
+        btn_collapse.setFixedSize(32, 32)
+        btn_collapse.setStyleSheet(f"""
+            QPushButton {{ 
+                background-color: {ACCENT_COLOR}; 
+                color: {ACCENT_TEXT}; 
+                border-radius: 16px; 
+                font-weight: bold; 
+                font-size: 26px; 
+                padding-bottom: 4px; /* Ajuste sutil para centralizar o texto do traço */
+            }}
+            QPushButton:hover {{ background-color: #00B3CC; }}
+        """)
+        btn_collapse.clicked.connect(on_back_callback)
+        
+        top_bar.addWidget(title_label)
+        top_bar.addStretch() # Empurra o título para a esquerda e o botão para a direita
+        top_bar.addWidget(btn_collapse)
+        
+        self.card_layout.addLayout(top_bar)
+        
+        # Linha divisória abaixo do título (Design clean)
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet("background-color: #444444; max-height: 1px; margin-top: 5px; margin-bottom: 15px;")
+        self.card_layout.addWidget(line)
+        
+        # Adiciona o card estilizado ao layout invisível da página
+        main_layout.addWidget(self.card_frame)
         
     def add_main_content(self, widget):
-        self.layout.addWidget(widget, stretch=1)
+        """Os conteúdos das páginas específicas agora são injetados diretamente dentro do card_layout."""
+        self.card_layout.addWidget(widget, stretch=1)
