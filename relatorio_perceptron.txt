@@ -1,0 +1,19 @@
+--- SETOSA vs VERSICOLOR ---
+Épocas Treinadas: 2 / 100
+Vetor de Pesos Final W: [0.0870, 0.2100, -0.3120, -0.1290]
+Bias final: 0.0300
+Acurácia no Teste: 100.00%
+
+--- VERSICOLOR vs VIRGINICA ---
+Épocas Treinadas: 100 / 100
+Vetor de Pesos Final W: [1.7340, 2.0820, -2.5440, -2.8650]
+Bias final: 1.4100
+Acurácia no Teste: 86.67%
+
+OBSERVACAO ITEM E: O algoritmo atingiu o limite máximo de 100 épocas. Isso ocorreu porque Versicolor e Virginica não são linearmente separáveis, provando que o Perceptron Clássico entra em loop infinito sem uma trava.
+
+--- SETOSA vs VIRGINICA ---
+Épocas Treinadas: 2 / 100
+Vetor de Pesos Final W: [0.0960, 0.2760, -0.4140, -0.1950]
+Bias final: 0.0600
+Acurácia no Teste: 100.00%

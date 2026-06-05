@@ -1,0 +1,21 @@
+====================================================
+ RELATÓRIO DE TREINAMENTO - CLASSIFICADORES DISTÂNCIA
+====================================================
+
+-> Tamanho do Conjunto de Treino: 105 amostras
+-> Tamanho do Conjunto de Teste: 45 amostras
+
+--- CENTRÓIDES CALCULADOS (Treino) ---
+Versicolor: [5.926, 2.806, 4.22, 1.309]
+Setosa: [5.014, 3.463, 1.48, 0.254]
+Virginica: [6.666, 2.98, 5.611, 2.023]
+
+--- DESEMPENHO NO CONJUNTO DE TESTE ---
+I) Classificador de Distância Mínima: 88.89% de Acurácia
+II) Classificador Máximo (Função Decisão): 88.89% de Acurácia
+   *Nota: Matematicamente, a acurácia de I e II deve ser idêntica.
+
+--- III) EQUAÇÕES DAS SUPERFÍCIES DE DECISÃO (Hiperplanos 4D) ---
+1. Virginica vs Setosa:   1.65*x1 + -0.48*x2 + 4.13*x3 + 1.77*x4 + (-24.75) = 0
+2. Setosa vs Versicolor:  -0.91*x1 + 0.66*x2 + -2.74*x3 + -1.05*x4 + (11.56) = 0
+3. Versicolor vs Virginica: -0.74*x1 + -0.17*x2 + -1.39*x3 + -0.71*x4 + (13.19) = 0
