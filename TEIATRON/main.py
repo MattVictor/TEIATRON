@@ -25,7 +25,10 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.stack)
 
         # --- 1. INSTANCIANDO OS 4 CARDS ---
-        self.card_input = InputCard(lambda: self.stack.setCurrentIndex(1))       
+        self.card_input = InputCard(
+            on_expand_callback=lambda: self.stack.setCurrentIndex(1),
+            on_classify_callback=self.classify_point # Conecta o botão ao Main
+        )     
         self.card_charts = ChartsCard(lambda: self.stack.setCurrentIndex(2))
         
         # Passando o callback de treinamento para o Algoritmo
@@ -64,7 +67,10 @@ class MainWindow(QMainWindow):
         # --- 3. PÁGINAS EXPANDIDAS ---
         self.page_input = InputExpandedPage(self.card_input.update_preview_text, lambda: self.stack.setCurrentIndex(0))
         self.page_charts = ChartsExpandedPage(self.card_charts.preview_plot, lambda: self.stack.setCurrentIndex(0))
-        self.page_algo = AlgorithmExpandedPage(self.card_algo.update_preview_text, lambda: self.stack.setCurrentIndex(0))
+        
+        # INJETAMOS O self.train_model AQUI NO FINAL:
+        self.page_algo = AlgorithmExpandedPage(self.card_algo.update_preview_text, lambda: self.stack.setCurrentIndex(0), self.train_model)
+        
         self.page_accuracy = AccuracyExpandedPage(lambda: self.stack.setCurrentIndex(0))
 
         # --- 4. ADICIONANDO PÁGINAS AO STACK ---
@@ -72,11 +78,62 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.page_charts)   # Index 2
         self.stack.addWidget(self.page_algo)     # Index 3
         self.stack.addWidget(self.page_accuracy) # Index 4
-
+    
     def train_model(self):
+        # Limpa logs antigos e avisa que começou
+        self.page_algo.clear_logs()
+        self.page_algo.append_log("[SISTEMA] Iniciando preparação dos dados...")
+        
+        try:
+            dataset, class_data, conjunto_data = self.page_input.get_full_dataset()
+            
+            if dataset and class_data:
+                self.page_algo.append_log(f"[OK] Dataset carregado. Total de pontos: {len(class_data)}")
+                self.page_algo.append_log("[SISTEMA] Atualizando gráficos de visualização...")
+                
+                self.page_charts.clear_charts()
+                self.page_charts.set_dataset(dataset, class_data, conjunto_data)
+                self.page_charts.checkboxes[0].setChecked(True) 
+                self.page_charts.checkboxes[1].setChecked(True) 
+                self.page_charts.plot_custom_chart()
+                
+            self.page_algo.append_log("[OK] Gráficos gerados com sucesso.")
+            self.page_algo.append_log("-----------------------------------------")
+            self.page_algo.append_log("[SISTEMA] TREINAMENTO CONCLUÍDO COM SUCESSO!")
+            
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Treinamento Concluído")
+            msg.setText("Modelo treinado com sucesso!")
+            
+        except Exception as e:
+            self.page_algo.append_log(f"[ERRO CRÍTICO] {e}")
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Treinamento Interrompido")
+            msg.setText(f"{e}")
+            
+        msg.setStyleSheet("""
+                QMessageBox { background-color: #1E1E1E; color: #FFFFFF; }
+                QLabel { color: #FFFFFF; font-size: 14px; }
+                QPushButton { background-color: #00E5FF; color: #000000; padding: 5px 15px; font-weight: bold; border-radius: 3px; }
+        """)
+        msg.exec()
+        
+    def classify_point(self):
+        # 1. Pega os valores atuais (Sepal e Petal)
+        current_inputs = self.page_input.get_current_inputs()
+        
+        # 2. Lógica Placeholder (Aqui entrará o Algoritmo no futuro)
+        predicted_class = "Iris-setosa" 
+        current_inputs["class"] = predicted_class
+        
+        # 3. Envia o ponto para a página de gráficos plotar
+        self.page_charts.set_classified_point(current_inputs)
+        
+        # 4. Gera o Pop-up visual
         msg = QMessageBox(self)
-        msg.setWindowTitle("Treinamento Concluído")
-        msg.setText("Modelo treinado com sucesso!")
+        msg.setWindowTitle("Resultado da Classificação")
+        msg.setText("O algoritmo classificou este ponto como:")
+        msg.setInformativeText(f"<b>{predicted_class}</b> (Placeholder)")
         
         msg.setStyleSheet("""
             QMessageBox { background-color: #1E1E1E; color: #FFFFFF; }
@@ -84,17 +141,6 @@ class MainWindow(QMainWindow):
             QPushButton { background-color: #00E5FF; color: #000000; padding: 5px 15px; font-weight: bold; border-radius: 3px; }
         """)
         msg.exec()
-
-        # Recebe a terceira variável (Conjunto)
-        dataset, class_data, conjunto_data = self.page_input.get_full_dataset()
-        
-        if dataset and class_data:
-            self.page_charts.clear_charts()
-            self.page_charts.set_dataset(dataset, class_data, conjunto_data)
-            
-            self.page_charts.checkboxes[0].setChecked(True) 
-            self.page_charts.checkboxes[1].setChecked(True) 
-            self.page_charts.plot_custom_chart()
             
 if __name__ == "__main__":
     app = QApplication(sys.argv)

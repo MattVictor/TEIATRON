@@ -22,7 +22,7 @@ class AccuracyCard(BaseCard):
         self.preview_label = QLabel(preview_text)
         self.preview_label.setWordWrap(True)
         self.preview_label.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 14px; line-height: 1.5;")
-        self.preview_label.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         self.add_preview_content(self.preview_label)
 

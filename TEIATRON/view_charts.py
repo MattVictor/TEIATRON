@@ -124,6 +124,11 @@ class ChartsExpandedPage(BaseExpandedPage):
         self.current_classes = classes
         self.current_conjuntos = conjuntos
 
+    def set_classified_point(self, point_dict):
+        """Recebe o ponto classificado, salva na memória e atualiza o gráfico atual."""
+        self.classified_point = point_dict
+        self.refresh_current_chart()
+
     def plot_custom_chart(self):
         if not self.current_dataset:
             self.show_error_popup("Nenhum dado disponível. Importe os dados e treine o modelo primeiro.")
@@ -139,7 +144,8 @@ class ChartsExpandedPage(BaseExpandedPage):
         y_data = self.current_dataset[y_key]
         
         chart_name = f"Dispersão ({x_key} x {y_key})"
-        self.add_chart(chart_name, "Dispersão", x_data, y_data, self.current_classes, self.current_conjuntos)
+        # Passamos as chaves x_key e y_key
+        self.add_chart(chart_name, "Dispersão", x_data, y_data, self.current_classes, self.current_conjuntos, x_key, y_key)
         
         self.list_widget.setCurrentRow(self.list_widget.count() - 1)
 
@@ -155,8 +161,13 @@ class ChartsExpandedPage(BaseExpandedPage):
         """)
         msg.exec()
 
-    def add_chart(self, name, chart_type, x_data, y_data, classes=None, conjuntos=None):
-        self.generated_charts[name] = {"type": chart_type, "x": x_data, "y": y_data, "classes": classes, "conjuntos": conjuntos}
+    def add_chart(self, name, chart_type, x_data, y_data, classes=None, conjuntos=None, x_key=None, y_key=None):
+        # Agora salvamos as chaves x_key e y_key para saber onde encaixar o novo ponto
+        self.generated_charts[name] = {
+            "type": chart_type, "x": x_data, "y": y_data, 
+            "classes": classes, "conjuntos": conjuntos,
+            "x_key": x_key, "y_key": y_key
+        }
         self.list_widget.addItem(name)
 
     def clear_charts(self):
@@ -192,7 +203,9 @@ class ChartsExpandedPage(BaseExpandedPage):
         x = np.array(chart_info["x"])
         y = np.array(chart_info["y"])
         classes = chart_info["classes"]
-        conjuntos = chart_info.get("conjuntos", ["Treino"] * len(x)) # Prevenção de erro
+        conjuntos = chart_info.get("conjuntos", ["Treino"] * len(x))
+        x_key = chart_info.get("x_key")
+        y_key = chart_info.get("y_key")
         
         show_train = self.chk_train.isChecked()
         show_test = self.chk_test.isChecked()
@@ -214,13 +227,40 @@ class ChartsExpandedPage(BaseExpandedPage):
                 if show_test:
                     idx_ts = [j for j, (c, conj) in enumerate(zip(classes, conjuntos)) if c == cls_name and conj == "Teste"]
                     if idx_ts:
-                        # symbol='t' gera o triângulo que diferencia visualmente
                         self.plot_widget.plot(x[idx_ts], y[idx_ts], pen=None, symbol='t', symbolBrush=brush, symbolSize=9, name=f"{cls_name} (Teste)")
                         self.preview_widget.plot(x[idx_ts], y[idx_ts], pen=None, symbol='t', symbolBrush=brush, symbolSize=4)
         else:
             pen = pg.mkPen(color=ACCENT_COLOR, width=3)
             self.plot_widget.plot(x, y, pen=pen)
             self.preview_widget.plot(x, y, pen=pen)
+
+        # =========================================================
+        # NOVO: SOBREPOSIÇÃO DO PONTO CLASSIFICADO (SEMPRE NO TOPO)
+        # =========================================================
+        if c_type == "Dispersão" and hasattr(self, 'classified_point') and self.classified_point:
+            cx = self.classified_point.get(x_key)
+            cy = self.classified_point.get(y_key)
+            
+            if cx is not None and cy is not None:
+                # Estrela Amarela Gigante
+                item = self.plot_widget.plot(
+                    [cx], [cy], 
+                    pen=pg.mkPen(color="#000000", width=1.5), # Borda preta para destacar
+                    symbol='star', 
+                    symbolBrush=pg.mkBrush(color="#FFFF00"),  # Amarelo vivo
+                    symbolSize=22, 
+                    name="Ponto Classificado"
+                )
+                item.setZValue(10) # <-- O MÁGICO: Força o ponto a ser desenhado sobre os outros
+                
+                item_prev = self.preview_widget.plot(
+                    [cx], [cy], 
+                    pen=pg.mkPen(color="#000000", width=1), 
+                    symbol='star', 
+                    symbolBrush=pg.mkBrush(color="#FFFF00"), 
+                    symbolSize=12
+                )
+                item_prev.setZValue(10)
 
     def mouse_moved(self, pos):
         if self.plot_widget.sceneBoundingRect().contains(pos):

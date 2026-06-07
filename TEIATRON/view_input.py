@@ -12,13 +12,14 @@ from config import TEXT_PRIMARY, ACCENT_COLOR, ACCENT_TEXT, WARNING_COLOR
 from base_components import BaseCard, BaseExpandedPage
 
 class InputCard(BaseCard):
-    def __init__(self, on_expand_callback):
+    # Alteramos o init para receber o on_classify_callback
+    def __init__(self, on_expand_callback, on_classify_callback):
         super().__init__("Entrada (Iris)", on_expand_callback)
         
         self.preview_label = QLabel("Nenhum dado carregado.")
         self.preview_label.setWordWrap(True)
+        self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter) # Mantendo centralizado!
         self.preview_label.setStyleSheet(f"color: {WARNING_COLOR}; font-size: 15px; font-weight: bold; font-family: 'Consolas';")
-        self.preview_label.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.add_preview_content(self.preview_label)
 
         self.btn_classify = QPushButton("Classificar")
@@ -33,7 +34,8 @@ class InputCard(BaseCard):
             }}
             QPushButton:hover {{ background-color: #00B3CC; }}
         """)
-        self.btn_classify.clicked.connect(self.show_classification_popup)
+        # Agora o botão chama a função injetada pelo main.py
+        self.btn_classify.clicked.connect(on_classify_callback)
         self.layout.addWidget(self.btn_classify)
 
     def update_preview_text(self, text):
@@ -136,6 +138,15 @@ class InputExpandedPage(BaseExpandedPage):
 
         self.add_main_content(container)
         self.sync_to_card()
+
+    def get_current_inputs(self):
+        """Coleta os 4 valores que estão atualmente digitados nas caixas de input."""
+        return {
+            "Sepal Length": self.inputs["Sepal Length"].value(),
+            "Sepal Width": self.inputs["Sepal Width"].value(),
+            "Petal Length": self.inputs["Petal Length"].value(),
+            "Petal Width": self.inputs["Petal Width"].value()
+        }
 
     # ==========================================
     # LÓGICA DE DADOS
@@ -291,8 +302,9 @@ class InputExpandedPage(BaseExpandedPage):
         """Retorna o dataset completo, as classes e as marcações de Treino/Teste."""
         rows = self.table.rowCount()
         cols = self.table.columnCount()
+        
         if rows == 0:
-            return None, None, None
+            raise Exception("Dataset não carregado")
             
         keys = ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"]
         dataset = {key: [] for key in keys}

@@ -10,7 +10,7 @@ class BaseCard(QFrame):
         super().__init__()
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setStyleSheet(f"""
-            BaseCard {{ background-color: {BG_CARD}; border: 2px solid #333333; border-radius: 12px; }}
+            BaseCard {{ background-color: {BG_CARD}; border: 2px solid #333333; border-radius: 12px;}}
             BaseCard:hover {{ border: 2px solid {ACCENT_COLOR}; }}
         """)
         
@@ -26,8 +26,8 @@ class BaseCard(QFrame):
         btn_expand.clicked.connect(on_expand_callback)
         
         title_label = QLabel(title)
-        title_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-        title_label.setStyleSheet(f"color: {TEXT_PRIMARY};")
+        title_label.setFont(QFont("Segoe UI", 15, QFont.Weight.Bold))
+        title_label.setStyleSheet(f"color: {TEXT_PRIMARY}; text-align: center;")
         
         top_bar.addWidget(btn_expand)
         top_bar.addWidget(title_label)
