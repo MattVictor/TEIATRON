@@ -72,7 +72,8 @@ class MainWindow(QMainWindow):
         # INJETAMOS O self.train_model AQUI NO FINAL:
         self.page_algo = AlgorithmExpandedPage(self.card_algo.update_preview_text, lambda: self.stack.setCurrentIndex(0), self.train_model)
         
-        self.page_accuracy = AccuracyExpandedPage(lambda: self.stack.setCurrentIndex(0))
+        # Onde estava: self.page_accuracy = AccuracyExpandedPage(...)
+        self.page_accuracy = AccuracyExpandedPage(lambda: self.stack.setCurrentIndex(0), self.evaluate_current_model)
 
         # --- 4. ADICIONANDO PÁGINAS AO STACK ---
         self.stack.addWidget(self.page_input)    # Index 1
@@ -214,7 +215,33 @@ class MainWindow(QMainWindow):
             self.page_charts.checkboxes[0].setChecked(True) 
             self.page_charts.checkboxes[1].setChecked(True) 
             
+            # ... (seu código de gerar o gráfico continua intacto aqui) ...
             self.page_charts.plot_custom_chart()
+            
+            # =========================================================
+            # --- 4. AVALIAÇÃO DE DESEMPENHO (DADOS DE TESTE) ---
+            # =========================================================
+            # --- 4. AVALIAÇÃO DE DESEMPENHO DINÂMICA ---
+            # Salva o estado dos dados para o avaliador poder recalcular
+            self.eval_data = {
+                "dataset": filtered_dataset,
+                "classes": filtered_class_data,
+                "conjuntos": filtered_conjunto_data
+            }
+            
+            # Executa a avaliação inicial baseada no que estiver selecionado no ComboBox
+            modo_atual = self.page_accuracy.combo_mode.currentText()
+            self.evaluate_current_model(modo_atual)
+            
+            # Pega o texto da miniatura do card para mostrar no pop-up
+            resumo_acc = self.card_accuracy.preview_label.text().split("\n")[1]
+
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Treinamento Concluído")
+            msg.setText(f"Modelo treinado com sucesso!\n\n{resumo_acc}")
+            
+        except Exception as e:
+            # ... resto do seu código (except) ...
             
             msg = QMessageBox(self)
             msg.setWindowTitle("Treinamento Concluído")
@@ -303,6 +330,59 @@ class MainWindow(QMainWindow):
             QPushButton { background-color: #00E5FF; color: #000000; padding: 5px 15px; font-weight: bold; border-radius: 3px; }
         """)
         msg.exec()
+        
+    def evaluate_current_model(self, modo_selecionado="Apenas Teste"):
+        """Calcula a Matriz de Confusão On-the-fly baseado na seleção do usuário (Teste/Treino/Ambos)."""
+        if not hasattr(self, 'current_model') or not hasattr(self, 'eval_data'):
+            self.card_accuracy.update_preview("Aguardando modelo e dados para avaliação...")
+            return
+
+        from ml_engine import ClassificadorMetricas
+        
+        filtered_dataset = self.eval_data["dataset"]
+        filtered_class_data = self.eval_data["classes"]
+        filtered_conjunto_data = self.eval_data["conjuntos"]
+        keys = ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"]
+
+        # Descobre dinamicamente os nomes e a ordem das classes presentes no modelo
+        classes_unicas = list(sorted(set(filtered_class_data)))
+        n = len(classes_unicas)
+        class_to_idx = {c: i for i, c in enumerate(classes_unicas)}
+        
+        # Cria matriz de zeros N x N
+        matriz = [[0 for _ in range(n)] for _ in range(n)]
+        
+        total_avaliado = 0
+        for i in range(len(filtered_class_data)):
+            conjunto = filtered_conjunto_data[i]
+            
+            # Filtro da UI
+            if modo_selecionado == "Apenas Teste" and conjunto != "Teste": continue
+            if modo_selecionado == "Apenas Treino" and conjunto != "Treino": continue
+
+            total_avaliado += 1
+            real = filtered_class_data[i]
+            ponto = [filtered_dataset[k][i] for k in keys]
+            
+            res = self.current_model.predict(ponto)
+            pred = res[0] if isinstance(res, tuple) else res
+            
+            real_idx = class_to_idx[real]
+            
+            # Tratamento de segurança caso o modelo preveja algo fora do radar (ex: OvA onde retorna Resto)
+            pred_idx = class_to_idx.get(pred, -1)
+            if pred_idx != -1:
+                matriz[real_idx][pred_idx] += 1
+
+        if total_avaliado > 0:
+            metrics = ClassificadorMetricas(matriz)
+            self.page_accuracy.update_metrics(matriz, classes_unicas, metrics)
+            self.card_accuracy.update_preview(
+                f"[{modo_selecionado}]\nAcerto Geral: {metrics.acerto_geral()*100:.2f}%\n"
+                f"Kappa: {metrics.coeficiente_kappa():.4f}\n\nClique para ver a Matriz {n}x{n}."
+            )
+        else:
+            self.card_accuracy.update_preview(f"Nenhum dado encontrado para: {modo_selecionado}")
             
 if __name__ == "__main__":
     app = QApplication(sys.argv)
