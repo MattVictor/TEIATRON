@@ -117,7 +117,7 @@ class InputExpandedPage(BaseExpandedPage):
         
         self.spin_pct = QSpinBox()
         self.spin_pct.setRange(1, 99)
-        self.spin_pct.setValue(80) # Padrão 80% Treino / 20% Teste
+        self.spin_pct.setValue(70) # Padrão 80% Treino / 20% Teste
         self.spin_pct.setStyleSheet(f"background-color: #333; color: {TEXT_PRIMARY}; padding: 6px; font-size: 14px; font-weight: bold;")
 
         btn_stratified = QPushButton("Aleatorizar por Classe")

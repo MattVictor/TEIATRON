@@ -1,4 +1,5 @@
 # view_charts.py
+import math
 import numpy as np
 import pyqtgraph as pg
 from PyQt6.QtWidgets import (
@@ -15,6 +16,10 @@ class ChartsCard(BaseCard):
     def __init__(self, on_expand_callback):
         super().__init__("Gráficos", on_expand_callback)
         self.preview_plot = pg.PlotWidget()
+        
+        # --- ADICIONE ESTA LINHA ---
+        self.preview_plot.setAspectLocked(True) 
+        
         self.preview_plot.setMouseEnabled(x=False, y=False)
         self.preview_plot.hideButtons()
         self.preview_plot.setMenuEnabled(False)
@@ -102,6 +107,10 @@ class ChartsExpandedPage(BaseExpandedPage):
         right_layout.addWidget(self.coord_label)
 
         self.plot_widget = pg.PlotWidget()
+        
+        # --- ADICIONE ESTA LINHA ---
+        self.plot_widget.setAspectLocked(True)
+        
         self.plot_widget.showGrid(x=True, y=True, alpha=0.2)
         self.plot_widget.scene().sigMouseMoved.connect(self.mouse_moved)
         self.legend = self.plot_widget.addLegend(offset=(10, 10), brush='#1E1E1EE6')
@@ -115,6 +124,10 @@ class ChartsExpandedPage(BaseExpandedPage):
         
         layout.addWidget(splitter)
         self.add_main_content(container)
+
+    def set_trained_model(self, model):
+        """Salva a referência do modelo atual para extrair linhas de decisão e centróides."""
+        self.trained_model = model
 
     # ==========================================
     # LÓGICA DE DADOS E PLOTAGEM
@@ -193,6 +206,9 @@ class ChartsExpandedPage(BaseExpandedPage):
         
         self.plot_widget.clear()
         self.preview_widget.clear()
+        self.plot_widget.getAxis('bottom').setLabel('')
+        self.plot_widget.getAxis('left').setLabel('')
+        
         if self.legend is not None:
             self.legend.clear() 
             
@@ -202,65 +218,136 @@ class ChartsExpandedPage(BaseExpandedPage):
         c_type = chart_info["type"]
         x = np.array(chart_info["x"])
         y = np.array(chart_info["y"])
+        
+        # --- NOVO: GRÁFICO DE CURVA DE ERROS ---
+        if c_type == "Linha":
+            self.plot_widget.getAxis('bottom').setLabel('Épocas')
+            self.plot_widget.getAxis('left').setLabel('Erros de Classificação')
+            pen = pg.mkPen(color=ACCENT_COLOR, width=3)
+            self.plot_widget.plot(x, y, pen=pen, symbol='o', symbolSize=5, symbolBrush=ACCENT_COLOR)
+            self.preview_widget.plot(x, y, pen=pen)
+            return # Encerra aqui pois o gráfico de linha não precisa de reta de decisão
+        
+        # --- GRÁFICO DE DISPERSÃO ---
         classes = chart_info["classes"]
         conjuntos = chart_info.get("conjuntos", ["Treino"] * len(x))
         x_key = chart_info.get("x_key")
         y_key = chart_info.get("y_key")
         
+        # === CORREÇÃO: Devolve o nome dos atributos para os Eixos X e Y ===
+        if x_key and y_key:
+            self.plot_widget.getAxis('bottom').setLabel(x_key, color='#00E5FF')
+            self.plot_widget.getAxis('left').setLabel(y_key, color='#00E5FF')
+        
         show_train = self.chk_train.isChecked()
         show_test = self.chk_test.isChecked()
         
-        if c_type == "Dispersão" and classes:
+        # 1. PLOTA OS PONTOS DO DATASET
+        if classes:
             unique_classes = list(sorted(set(classes)))
             for i, cls_name in enumerate(unique_classes):
                 color = CLASS_COLORS[i % len(CLASS_COLORS)]
                 brush = pg.mkBrush(color=color)
                 
-                # PLOT DE TREINO
                 if show_train:
                     idx_tr = [j for j, (c, conj) in enumerate(zip(classes, conjuntos)) if c == cls_name and conj == "Treino"]
                     if idx_tr:
                         self.plot_widget.plot(x[idx_tr], y[idx_tr], pen=None, symbol='o', symbolBrush=brush, symbolSize=8, name=f"{cls_name} (Treino)")
                         self.preview_widget.plot(x[idx_tr], y[idx_tr], pen=None, symbol='o', symbolBrush=brush, symbolSize=4)
                 
-                # PLOT DE TESTE
                 if show_test:
                     idx_ts = [j for j, (c, conj) in enumerate(zip(classes, conjuntos)) if c == cls_name and conj == "Teste"]
                     if idx_ts:
                         self.plot_widget.plot(x[idx_ts], y[idx_ts], pen=None, symbol='t', symbolBrush=brush, symbolSize=9, name=f"{cls_name} (Teste)")
                         self.preview_widget.plot(x[idx_ts], y[idx_ts], pen=None, symbol='t', symbolBrush=brush, symbolSize=4)
-        else:
-            pen = pg.mkPen(color=ACCENT_COLOR, width=3)
-            self.plot_widget.plot(x, y, pen=pen)
-            self.preview_widget.plot(x, y, pen=pen)
+        
+        # 2. DESENHA A MATEMÁTICA DO CLASSIFICADOR (Reta)
+        if hasattr(self, 'trained_model'):
+            model_name = self.trained_model.__class__.__name__
+            keys = ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"]
+            idx_x = keys.index(x_key)
+            idx_y = keys.index(y_key)
+            
+            if model_name == "MinDistanceClassifier":
+                centroides = self.trained_model.centroids
+                classes_treinadas = self.trained_model.classes_trained
+                
+                for c_name, coords in centroides.items():
+                    cx, cy = coords[idx_x], coords[idx_y]
+                    self.plot_widget.plot([cx], [cy], pen=None, symbol='x', symbolPen=pg.mkPen(color='w', width=3), symbolSize=15, name=f"Centróide {c_name}")
+                
+                if len(classes_treinadas) == 2:
+                    c1_coords = centroides[classes_treinadas[0]]
+                    c2_coords = centroides[classes_treinadas[1]]
+                    nx = c2_coords[idx_x] - c1_coords[idx_x]
+                    ny = c2_coords[idx_y] - c1_coords[idx_y]
+                    mx = (c1_coords[idx_x] + c2_coords[idx_x]) / 2.0
+                    my = (c1_coords[idx_y] + c2_coords[idx_y]) / 2.0
+                    
+                    if ny != 0:
+                        angulo_deg = math.degrees(math.atan2(-nx, ny))
+                        a = -nx / ny
+                        b = my - (a * mx)
+                        equacao_legenda = f"g(x) = {a:.2f}x {'+' if b >= 0 else '-'} {abs(b):.2f}"
+                    else:
+                        angulo_deg = 90
+                        equacao_legenda = f"g(x) -> x = {mx:.2f}"
+                    
+                    pen_reta = pg.mkPen(color=WARNING_COLOR, width=2, style=Qt.PenStyle.DashLine)
+                    reta = pg.InfiniteLine(pos=(mx, my), angle=angulo_deg, pen=pen_reta)
+                    self.plot_widget.addItem(reta)
+                    self.plot_widget.plot([], [], pen=pen_reta, name=equacao_legenda)
 
-        # =========================================================
-        # NOVO: SOBREPOSIÇÃO DO PONTO CLASSIFICADO (SEMPRE NO TOPO)
-        # =========================================================
-        if c_type == "Dispersão" and hasattr(self, 'classified_point') and self.classified_point:
+            # --- RETA DO PERCEPTRON (PROJEÇÃO 4D -> 2D) ---
+            elif model_name == "PerceptronClassifier":
+                pesos = self.trained_model.pesos
+                
+                b = pesos[0]
+                w_x = pesos[idx_x + 1]
+                w_y = pesos[idx_y + 1]
+                
+                # MATEMÁTICA: Como o hiperplano tem 4 dimensões (W1*X1 + W2*X2 + W3*X3 + W4*X4 + B = 0),
+                # para desenhar uma linha 2D, substituímos as outras 2 variáveis pelas suas médias.
+                effective_bias = b
+                for i, k in enumerate(keys):
+                    if k != x_key and k != y_key:
+                        dados_coluna = self.current_dataset[k]
+                        if len(dados_coluna) > 0:
+                            media_coluna = sum(dados_coluna) / len(dados_coluna)
+                            effective_bias += pesos[i + 1] * media_coluna
+                
+                # Agora traçamos Wx*X + Wy*Y + Effective_Bias = 0
+                if w_y != 0:
+                    a = -w_x / w_y
+                    intercept = -effective_bias / w_y
+                    angulo_deg = math.degrees(math.atan(a))
+                    mx, my = 0, intercept 
+                    
+                    sinal_wy = "+" if w_y >= 0 else "-"
+                    sinal_b = "+" if effective_bias >= 0 else "-"
+                    equacao_legenda = f"{w_x:.2f}x {sinal_wy} {abs(w_y):.2f}y {sinal_b} {abs(effective_bias):.2f} = 0"
+                else:
+                    angulo_deg = 90
+                    mx, my = -effective_bias / w_x if w_x != 0 else 0, 0
+                    sinal_b = "+" if effective_bias >= 0 else "-"
+                    equacao_legenda = f"{w_x:.2f}x {sinal_b} {abs(effective_bias):.2f} = 0"
+                
+                pen_reta = pg.mkPen(color=WARNING_COLOR, width=2, style=Qt.PenStyle.DashLine)
+                reta = pg.InfiniteLine(pos=(mx, my), angle=angulo_deg, pen=pen_reta)
+                self.plot_widget.addItem(reta)
+                self.plot_widget.plot([], [], pen=pen_reta, name=f"Fronteira 2D: {equacao_legenda}")
+
+            elif model_name == "MaxDistanceClassifier":
+                self.plot_widget.plot([], [], pen=None, name="Critério: Minimização da Distância Máxima")
+
+        # 3. PONTO CLASSIFICADO
+        if hasattr(self, 'classified_point') and self.classified_point:
             cx = self.classified_point.get(x_key)
             cy = self.classified_point.get(y_key)
             
             if cx is not None and cy is not None:
-                # Estrela Amarela Gigante
-                item = self.plot_widget.plot(
-                    [cx], [cy], 
-                    pen=pg.mkPen(color="#000000", width=1.5), # Borda preta para destacar
-                    symbol='star', 
-                    symbolBrush=pg.mkBrush(color="#FFFF00"),  # Amarelo vivo
-                    symbolSize=22, 
-                    name="Ponto Classificado"
-                )
-                item.setZValue(10) # <-- O MÁGICO: Força o ponto a ser desenhado sobre os outros
-                
-                item_prev = self.preview_widget.plot(
-                    [cx], [cy], 
-                    pen=pg.mkPen(color="#000000", width=1), 
-                    symbol='star', 
-                    symbolBrush=pg.mkBrush(color="#FFFF00"), 
-                    symbolSize=12
-                )
-                item_prev.setZValue(10)
+                item = self.plot_widget.plot([cx], [cy], pen=pg.mkPen(color="#000000", width=1.5), symbol='star', symbolBrush=pg.mkBrush(color="#FFFF00"), symbolSize=22, name="Ponto Classificado")
+                item.setZValue(10)
 
     def mouse_moved(self, pos):
         if self.plot_widget.sceneBoundingRect().contains(pos):
