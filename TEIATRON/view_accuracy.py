@@ -69,9 +69,9 @@ class AccuracyExpandedPage(BaseExpandedPage):
 
         for row, name in enumerate(metrics_names):
             lbl_name = QLabel(name)
-            lbl_name.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px;")
+            lbl_name.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 20px;")
             lbl_value = QLabel("0.0000")
-            lbl_value.setStyleSheet(f"color: {WARNING_COLOR}; font-size: 14px; font-weight: bold; font-family: 'Consolas';")
+            lbl_value.setStyleSheet(f"color: {WARNING_COLOR}; font-size: 20px; font-weight: bold; font-family: 'Consolas';")
             
             grid.addWidget(lbl_name, row, 0)
             grid.addWidget(lbl_value, row, 1)

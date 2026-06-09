@@ -191,6 +191,67 @@ class MainWindow(QMainWindow):
                 self.page_algo.append_log(f"Pesos Finais [Bias, W1..W4]: [{p_finais}]")
                 if erros and erros[-1] == 0:
                     self.page_algo.append_log("★ Convergiu perfeitamente! ★")
+            
+            elif params['Algoritmo'] == "Problema do XOR":
+                self.page_algo.append_log("\n[INICIANDO O FAMOSO PROBLEMA DO XOR]")
+                self.page_algo.append_log("Aviso Teórico: O XOR não é linearmente separável.")
+                
+                # 1. Dataset Fixo do XOR (Preenchido com 0 nas variáveis extras para não quebrar o gráfico)
+                X_train = [
+                    [0.0, 0.0, 0.0, 0.0], # 0 XOR 0 = 0
+                    [0.0, 1.0, 0.0, 0.0], # 0 XOR 1 = 1
+                    [1.0, 0.0, 0.0, 0.0], # 1 XOR 0 = 1
+                    [1.0, 1.0, 0.0, 0.0]  # 1 XOR 1 = 0
+                ]
+                # Saída desejada (d)
+                y_train = ["Classe 0", "Classe 1", "Classe 1", "Classe 0"]
+                
+                # Prepara os dados visuais simulando o formato do dataset
+                filtered_dataset = {
+                    "Sepal Length": [0.0, 0.0, 1.0, 1.0],
+                    "Sepal Width":  [0.0, 1.0, 0.0, 1.0],
+                    "Petal Length": [0.0, 0.0, 0.0, 0.0],
+                    "Petal Width":  [0.0, 0.0, 0.0, 0.0]
+                }
+                filtered_class_data = y_train
+                filtered_conjunto_data = ["Treino", "Treino", "Treino", "Treino"]
+
+                self.current_model = PerceptronClassifier()
+                
+                # Pegando parâmetros do usuário (Sempre usando Regra Delta para este teste)
+                epocas = params.get("Épocas", 100)
+                lr = params.get("Learning Rate", 0.1)
+                bias = params.get("Bias Inicial", 0.0)
+                
+                # Permite que o usuário defina os pesos, mas garante que tenha 5 elementos
+                pesos_str = params.get("Pesos Iniciais", "0,0,0,0")
+                try:
+                    pesos_list = [bias] + [float(w.strip()) for w in pesos_str.split(",")]
+                except ValueError:
+                    pesos_list = [0.0, 0.0, 0.0, 0.0, 0.0]
+                
+                if len(pesos_list) < 5:
+                    pesos_list += [0.0] * (5 - len(pesos_list))
+                
+                # 2. Treina o modelo forçando a Classe 1 como Alvo e ativando a Regra Delta
+                self.current_model.train(X_train, y_train, "Classe 1", epocas, lr, pesos_list, regra_delta=True)
+                
+                # 3. Log de Erros
+                erros = self.current_model.historico_erros
+                total_epocas = len(erros)
+                self.page_algo.append_log("\n[HISTÓRICO DE ERROS DA REGRA DELTA]")
+                
+                for ep in range(total_epocas):
+                    if total_epocas <= 50 or ep < 5 or ep >= total_epocas - 5 or ep % (total_epocas // 10) == 0:
+                        self.page_algo.append_log(f"  ↳ Época {ep + 1:03d}: {erros[ep]} erros")
+                
+                self.page_algo.append_log("\n[TREINAMENTO CONCLUÍDO]")
+                p_finais = ", ".join([f"{p:.4f}" for p in self.current_model.pesos])
+                self.page_algo.append_log(f"Pesos Finais: [{p_finais}]")
+                
+                # O toque educativo no log
+                if erros[-1] > 0:
+                    self.page_algo.append_log("★ Conclusão: Como esperado, o modelo não zerou os erros! O hiperplano linear não consegue separar o XOR. ★")
 
             # --- 3. ATUALIZAR GRÁFICOS ---
             self.page_algo.append_log("\n[SISTEMA] Atualizando gráficos...")
