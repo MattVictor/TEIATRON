@@ -172,3 +172,29 @@ class PerceptronClassifier:
         nome_classe = self.reverse_map[classe_predita]
         
         return nome_classe, {"Ativação (Soma Ponderada)": ativacao}
+    
+class ClassificadorMetricas:
+    def __init__(self, tn, fp, fn, tp):
+        self.tn, self.fp = tn, fp
+        self.fn, self.tp = tp
+        self.total = tn + fp + fn + tp
+
+    def acerto_geral(self): return (self.tp + self.tn) / self.total if self.total > 0 else 0
+    def acuracia_produtor(self): return self.tp / (self.tp + self.fn) if (self.tp + self.fn) > 0 else 0
+    def acuracia_usuario(self): return self.tp / (self.tp + self.fp) if (self.tp + self.fp) > 0 else 0
+
+    def coeficiente_kappa(self):
+        po = self.acerto_geral()
+        pe = (((self.tp + self.fp) * (self.tp + self.fn)) + ((self.tn + self.fn) * (self.tn + self.fp))) / (self.total ** 2)
+        return (po - pe) / (1 - pe) if (1 - pe) != 0 else 0
+
+    def coeficiente_tau(self): return (self.acerto_geral() - 0.5) / 0.5
+    
+    def coeficiente_matthews(self):
+        num = (self.tp * self.tn) - (self.fp * self.fn)
+        den = (self.tp + self.fp) * (self.tp + self.fn) * (self.tn + self.fp) * (self.tn + self.fn)
+        return num / (den ** 0.5) if den != 0 else 0
+
+    def fb_score(self, b):
+        prec, rec = self.acuracia_usuario(), self.acuracia_produtor()
+        return ((1 + b**2) * prec * rec) / ((b**2 * prec) + rec) if (b**2 * prec + rec) > 0 else 0
