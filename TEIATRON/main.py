@@ -1,6 +1,8 @@
 import sys
 import numpy as np
-from PyQt6.QtWidgets import (
+import os
+import pickle
+from PyQt6.QtWidgets import (QMenuBar, QDialog, QListWidget, QInputDialog, QHBoxLayout, QComboBox, QPushButton,
     QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QSplitter, QStackedWidget, QLabel, QMessageBox
 )
@@ -15,12 +17,123 @@ from view_charts import ChartsCard, ChartsExpandedPage
 from view_algorithm import AlgorithmCard, AlgorithmExpandedPage
 from view_accuracy import AccuracyCard, AccuracyExpandedPage
 
+class ModelHistoryDialog(QDialog):
+    """Janela pop-up que lista os modelos salvos no histórico."""
+    def __init__(self, models_dir, parent=None):
+        super().__init__(parent)
+        self.models_dir = models_dir
+        self.selected_model = None
+        
+        self.setWindowTitle("Histórico de Treinamentos Salvos")
+        self.setMinimumSize(400, 300)
+        self.setStyleSheet("background-color: #1E1E1E; color: #FFFFFF;")
+
+        layout = QVBoxLayout(self)
+
+        # Lista visual
+        self.list_widget = QListWidget()
+        self.list_widget.setStyleSheet("""
+            QListWidget { 
+                background-color: #2D2D2D; 
+                color: #FFFFFF; 
+                border: 1px solid #444444; 
+                border-radius: 4px; 
+                font-size: 13px; 
+                padding: 5px;
+            }
+            QListWidget::item:hover { background-color: #3D3D3D; }
+            QListWidget::item:selected { background-color: #0078D7; color: white; font-weight: bold; }
+        """)
+        self.list_widget.itemDoubleClicked.connect(self.confirm_selection)
+        layout.addWidget(self.list_widget)
+
+        # Botões de Ação
+        btn_layout = QHBoxLayout()
+        
+        btn_load = QPushButton("Carregar Modelo")
+        btn_load.setStyleSheet("background-color: #0078D7; color: white; font-weight: bold; padding: 6px 15px; border-radius: 4px;")
+        btn_load.clicked.connect(self.confirm_selection)
+        
+        btn_delete = QPushButton("Excluir")
+        btn_delete.setStyleSheet("background-color: transparent; color: #FF4D4D; padding: 6px 15px; border: 1px solid #FF4D4D; border-radius: 4px;")
+        btn_delete.clicked.connect(self.delete_selected)
+        
+        btn_layout.addWidget(btn_delete)
+        btn_layout.addStretch()
+        btn_layout.addWidget(btn_load)
+        layout.addLayout(btn_layout)
+
+        self.load_history()
+
+    def load_history(self):
+        """Varre a pasta e joga os nomes limpos na lista."""
+        self.list_widget.clear()
+        if os.path.exists(self.models_dir):
+            arquivos = [f for f in os.listdir(self.models_dir) if f.endswith(".pkl")]
+            for f in arquivos:
+                self.list_widget.addItem(f.replace(".pkl", ""))
+
+    def confirm_selection(self):
+        """Define o modelo selecionado e fecha a janela para carregar no sistema."""
+        current_item = self.list_widget.currentItem()
+        if current_item:
+            self.selected_model = current_item.text()
+            self.accept() # Fecha o pop-up com sinal de sucesso
+
+    def delete_selected(self):
+        """Remove o arquivo selecionado."""
+        current_item = self.list_widget.currentItem()
+        if not current_item:
+            return
+            
+        nome = current_item.text()
+        resposta = QMessageBox.question(
+            self, "Confirmar Exclusão", 
+            f"Deseja apagar permanentemente o modelo '{nome}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if resposta == QMessageBox.StandardButton.Yes:
+            filepath = os.path.join(self.models_dir, f"{nome}.pkl")
+            if os.path.exists(filepath):
+                os.remove(filepath)
+                self.load_history()
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Dashboard ML & Analytics - Final")
         self.resize(1150, 800)
         self.setStyleSheet(f"background-color: {BG_MAIN};")
+        
+        # --- 1. CONFIGURAÇÃO DO DIRETÓRIO DE MODELOS ---
+        self.models_dir = "saved_models"
+        if not os.path.exists(self.models_dir):
+            os.makedirs(self.models_dir)
+
+        # --- 2. CONFIGURAÇÃO DA MENUBAR PADRÃO DO PYQT6 ---
+        # Cria a barra no topo absoluto da janela
+        self.menu_bar = QMenuBar(self)
+        self.setMenuBar(self.menu_bar) # Vincula nativamente à MainWindow
+        self.menu_bar.setStyleSheet("""
+            QMenuBar { 
+                background-color: #1A1A1A; 
+                color: #FFFFFF; 
+                font-size: 13px;
+                border-bottom: 1px solid #333333;
+            }
+            QMenuBar::item { background-color: transparent; padding: 5px 10px; }
+            QMenuBar::item:selected { background-color: #333333; color: #00E5FF; }
+        """)
+
+        # Adiciona os menus e as ações
+        menu_modelos = self.menu_bar.addMenu("Modelos")
+        
+        acao_historico = menu_modelos.addAction("Histórico de Treinamento")
+        acao_historico.triggered.connect(self.open_history_dialog)
+        
+        acao_salvar = menu_modelos.addAction("Salvar Modelo Atual")
+        acao_salvar.triggered.connect(self.save_model)
         
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
@@ -37,7 +150,7 @@ class MainWindow(QMainWindow):
             on_expand_callback=lambda: self.stack.setCurrentIndex(3),
             on_train_callback=self.train_model
         )
-        self.card_accuracy = AccuracyCard(lambda: self.stack.setCurrentIndex(4))
+        self.card_accuracy = AccuracyCard(self.open_accuracy_page)
 
         # --- 2. LAYOUT DO DASHBOARD ---
         dash_widget = QWidget()
@@ -74,7 +187,7 @@ class MainWindow(QMainWindow):
         
         # Onde estava: self.page_accuracy = AccuracyExpandedPage(...)
         self.page_accuracy = AccuracyExpandedPage(lambda: self.stack.setCurrentIndex(0), self.evaluate_current_model)
-
+        
         # --- 4. ADICIONANDO PÁGINAS AO STACK ---
         self.stack.addWidget(self.page_input)    # Index 1
         self.stack.addWidget(self.page_charts)   # Index 2
@@ -392,59 +505,172 @@ class MainWindow(QMainWindow):
         """)
         msg.exec()
         
-    def evaluate_current_model(self, modo_selecionado="Apenas Teste"):
-        """Calcula a Matriz de Confusão On-the-fly baseado na seleção do usuário (Teste/Treino/Ambos)."""
+    def evaluate_current_model(self, _=None):
+        """Calcula a Matriz e compara com outro modelo, se selecionado."""
         if not hasattr(self, 'current_model') or not hasattr(self, 'eval_data'):
             self.card_accuracy.update_preview("Aguardando modelo e dados para avaliação...")
             return
 
         from ml_engine import ClassificadorMetricas
         
+        modo_selecionado = self.page_accuracy.combo_mode.currentText()
+        modelo_comparacao = self.page_accuracy.combo_compare.currentText()
+        
         filtered_dataset = self.eval_data["dataset"]
         filtered_class_data = self.eval_data["classes"]
         filtered_conjunto_data = self.eval_data["conjuntos"]
         keys = ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"]
 
-        # Descobre dinamicamente os nomes e a ordem das classes presentes no modelo
         classes_unicas = list(sorted(set(filtered_class_data)))
         n = len(classes_unicas)
         class_to_idx = {c: i for i, c in enumerate(classes_unicas)}
         
-        # Cria matriz de zeros N x N
-        matriz = [[0 for _ in range(n)] for _ in range(n)]
-        
-        total_avaliado = 0
-        for i in range(len(filtered_class_data)):
-            conjunto = filtered_conjunto_data[i]
-            
-            # Filtro da UI
-            if modo_selecionado == "Apenas Teste" and conjunto != "Teste": continue
-            if modo_selecionado == "Apenas Treino" and conjunto != "Treino": continue
+        # Função auxiliar para rodar a matriz de um modelo
+        def computar_matriz_modelo(modelo):
+            matriz = [[0 for _ in range(n)] for _ in range(n)]
+            total = 0
+            for i in range(len(filtered_class_data)):
+                conjunto = filtered_conjunto_data[i]
+                if modo_selecionado == "Apenas Teste" and conjunto != "Teste": continue
+                if modo_selecionado == "Apenas Treino" and conjunto != "Treino": continue
 
-            total_avaliado += 1
-            real = filtered_class_data[i]
-            ponto = [filtered_dataset[k][i] for k in keys]
-            
-            res = self.current_model.predict(ponto)
-            pred = res[0] if isinstance(res, tuple) else res
-            
-            real_idx = class_to_idx[real]
-            
-            # Tratamento de segurança caso o modelo preveja algo fora do radar (ex: OvA onde retorna Resto)
-            pred_idx = class_to_idx.get(pred, -1)
-            if pred_idx != -1:
-                matriz[real_idx][pred_idx] += 1
+                total += 1
+                real = filtered_class_data[i]
+                ponto = [filtered_dataset[k][i] for k in keys]
+                
+                res = modelo.predict(ponto)
+                pred = res[0] if isinstance(res, tuple) else res
+                
+                real_idx = class_to_idx[real]
+                pred_idx = class_to_idx.get(pred, -1)
+                if pred_idx != -1:
+                    matriz[real_idx][pred_idx] += 1
+            return matriz, total
+
+        # Roda para o modelo ATUAL
+        matriz_atual, total_avaliado = computar_matriz_modelo(self.current_model)
 
         if total_avaliado > 0:
-            metrics = ClassificadorMetricas(matriz)
-            self.page_accuracy.update_metrics(matriz, classes_unicas, metrics)
+            metrics_current = ClassificadorMetricas(matriz_atual)
+            metrics_compare = None
+            
+            # Tenta carregar e rodar o modelo COMPARADO
+            if modelo_comparacao != "Nenhum":
+                filepath = os.path.join(self.models_dir, f"{modelo_comparacao}.pkl")
+                if os.path.exists(filepath):
+                    try:
+                        with open(filepath, 'rb') as f:
+                            dados = pickle.load(f)
+                            modelo_b = dados["model"]
+                            matriz_comp, _ = computar_matriz_modelo(modelo_b)
+                            metrics_compare = ClassificadorMetricas(matriz_comp)
+                    except:
+                        pass # Falhou em ler, ignora comparação
+            
+            self.page_accuracy.update_metrics(matriz_atual, classes_unicas, metrics_current, metrics_compare)
+            
             self.card_accuracy.update_preview(
-                f"[{modo_selecionado}]\nAcerto Geral: {metrics.acerto_geral()*100:.2f}%\n"
-                f"Kappa: {metrics.coeficiente_kappa():.4f}\n\nClique para ver a Matriz {n}x{n}."
+                f"[{modo_selecionado}]\nAcerto Geral: {metrics_current.acerto_geral()*100:.2f}%\n"
+                f"Kappa: {metrics_current.coeficiente_kappa():.4f}\n\nClique para ver a Matriz e a Comparação."
             )
         else:
             self.card_accuracy.update_preview(f"Nenhum dado encontrado para: {modo_selecionado}")
+    
+    def open_history_dialog(self):
+        """Abre o Pop-Up do Histórico e gerencia o modelo que o usuário escolher."""
+        dialog = ModelHistoryDialog(self.models_dir, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Se o usuário confirmou a seleção, o nome do modelo estará aqui
+            if dialog.selected_model:
+                self.load_model_by_name(dialog.selected_model)
+
+    def save_model(self):
+        """Salva os parâmetros do modelo atual em um arquivo binário."""
+        if not hasattr(self, 'current_model'):
+            QMessageBox.warning(self, "Aviso", "Treine um modelo primeiro antes de salvar!")
+            return
+
+        nome, ok = QInputDialog.getText(self, "Salvar Treinamento", "Digite um nome para este modelo:")
+        if ok and nome.strip():
+            nome_arquivo = nome.strip()
+            filepath = os.path.join(self.models_dir, f"{nome_arquivo}.pkl")
             
+            dados_salvos = {
+                "model": self.current_model,
+                "eval_data": getattr(self, 'eval_data', None)
+            }
+            
+            with open(filepath, 'wb') as f:
+                pickle.dump(dados_salvos, f)
+
+            self.page_algo.append_log(f"\n[SISTEMA] Modelo '{nome_arquivo}.pkl' salvo com sucesso!")
+            QMessageBox.information(self, "Sucesso", f"O modelo '{nome_arquivo}' foi guardado no histórico!")
+
+    def load_model_by_name(self, nome_modelo):
+        """Carrega e restaura as informações do arquivo .pkl selecionado."""
+        filepath = os.path.join(self.models_dir, f"{nome_modelo}.pkl")
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, 'rb') as f:
+                    dados_salvos = pickle.load(f)
+
+                self.current_model = dados_salvos["model"]
+                
+                # Restaura os dados para plotagem e acurácia automática se existirem
+                if dados_salvos.get("eval_data"):
+                    self.eval_data = dados_salvos["eval_data"]
+                    
+                    # Atualiza os gráficos
+                    self.page_charts.set_trained_model(self.current_model)
+                    self.page_charts.set_dataset(
+                        self.eval_data["dataset"], 
+                        self.eval_data["classes"], 
+                        self.eval_data["conjuntos"]
+                    )
+                    self.page_charts.plot_custom_chart()
+                    
+                    # Atualiza a aba de Acurácia
+                    modo_atual = self.page_accuracy.combo_mode.currentText()
+                    self.evaluate_current_model(modo_atual)
+
+                self.page_algo.append_log(f"\n[SISTEMA] O modelo '{nome_modelo}' foi carregado com sucesso do histórico!")
+                QMessageBox.information(self, "Sucesso", f"Modelo '{nome_modelo}' carregado e pronto para classificar novos pontos!")
+                
+            except Exception as e:
+                QMessageBox.critical(self, "Erro ao Carregar", f"Ocorreu um erro ao carregar o arquivo binário:\n{e}")
+    
+    def open_accuracy_page(self):
+        """Função chamada ao clicar no card de Acurácia. Popula o ComboBox e abre a página correta."""
+        # 1. Guarda o que estava selecionado para não perder a referência
+        atual_selecionado = self.page_accuracy.combo_compare.currentText()
+        
+        # Bloqueia os sinais para não disparar recálculos enquanto adiciona os itens
+        self.page_accuracy.combo_compare.blockSignals(True) 
+        self.page_accuracy.combo_compare.clear()
+        self.page_accuracy.combo_compare.addItem("Nenhum")
+        
+        # 2. Varre a pasta e adiciona os modelos salvos
+        if hasattr(self, 'models_dir') and os.path.exists(self.models_dir):
+            arquivos = [f for f in os.listdir(self.models_dir) if f.endswith(".pkl")]
+            for f in arquivos:
+                nome_limpo = f.replace(".pkl", "")
+                self.page_accuracy.combo_compare.addItem(nome_limpo)
+                
+        # 3. Restaura a seleção se ela ainda existir
+        idx = self.page_accuracy.combo_compare.findText(atual_selecionado)
+        if idx >= 0:
+            self.page_accuracy.combo_compare.setCurrentIndex(idx)
+        else:
+            self.page_accuracy.combo_compare.setCurrentIndex(0)
+            
+        self.page_accuracy.combo_compare.blockSignals(False)
+        
+        # 4. Atualiza a matriz e a tabela antes de mostrar a tela
+        self.evaluate_current_model()
+        
+        # 5. A SOLUÇÃO: Troca de página usando a referência direta do widget
+        self.stack.setCurrentWidget(self.page_accuracy)
+    
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     setup_pyqtgraph() 
