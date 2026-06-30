@@ -1,5 +1,6 @@
 # ml_engine.py
 import math
+import numpy as np
 
 class MinDistanceClassifier:
     def __init__(self):
@@ -236,3 +237,96 @@ class ClassificadorMetricas:
         if (prec + rec) == 0:
             return 0
         return ((1 + b**2) * prec * rec) / ((b**2 * prec) + rec)
+    
+class OptimalBayesMAP:
+    def fit(self, X, y):
+        self.classes = np.unique(y)
+        self.parameters = {}
+        
+        for c in self.classes:
+            X_c = X[np.array(y) == c]
+            mean = np.mean(X_c, axis=0)
+            # rowvar=False garante que as colunas são variáveis
+            cov = np.cov(X_c, rowvar=False) 
+            
+            # Adiciona um pequeno valor à diagonal para evitar matriz singular
+            cov += np.eye(cov.shape[0]) * 1e-6 
+            
+            self.parameters[c] = {'mean': mean, 'cov': cov}
+            
+    def predict(self, X):
+        X = np.array(X)
+        if X.ndim == 1:
+            X = X.reshape(1, -1)
+            
+        preds = []
+        for x in X:
+            posteriors = []
+            for c in self.classes:
+                mean = self.parameters[c]['mean']
+                cov = self.parameters[c]['cov']
+                
+                inv_cov = np.linalg.inv(cov)
+                det_cov = np.linalg.det(cov)
+                diff = x - mean
+                
+                term1 = -0.5 * np.log(det_cov)
+                term2 = -0.5 * np.dot(np.dot(diff.T, inv_cov), diff)
+                
+                posterior = term1 + term2
+                posteriors.append(posterior)
+            preds.append(self.classes[np.argmax(posteriors)])
+        return preds[0] if len(preds) == 1 else np.array(preds)
+
+    def get_decision_surface(self, classe_i, classe_j):
+        """Retorna W, w e w0 para a fronteira quadrática entre duas classes."""
+        m_i = self.parameters[classe_i]['mean']
+        cov_i = self.parameters[classe_i]['cov']
+        inv_cov_i = np.linalg.inv(cov_i)
+        
+        m_j = self.parameters[classe_j]['mean']
+        cov_j = self.parameters[classe_j]['cov']
+        inv_cov_j = np.linalg.inv(cov_j)
+        
+        W = -0.5 * (inv_cov_i - inv_cov_j)
+        w = np.dot(inv_cov_i, m_i) - np.dot(inv_cov_j, m_j)
+        
+        term_w0_1 = -0.5 * (np.dot(np.dot(m_i.T, inv_cov_i), m_i) - np.dot(np.dot(m_j.T, inv_cov_j), m_j))
+        term_w0_2 = -0.5 * np.log(np.linalg.det(cov_i) / np.linalg.det(cov_j))
+        w0 = term_w0_1 + term_w0_2
+        
+        return W, w, w0
+
+# =====================================================================
+# CLASSIFICADOR NAIVE BAYES - MAP
+# =====================================================================
+class NaiveBayesMAP:
+    def fit(self, X, y):
+        self.classes = np.unique(y)
+        self.parameters = {}
+        
+        for c in self.classes:
+            X_c = X[np.array(y) == c]
+            mean = np.mean(X_c, axis=0)
+            var = np.var(X_c, axis=0) + 1e-6 # Evita divisão por zero
+            self.parameters[c] = {'mean': mean, 'var': var}
+            
+    def predict(self, X):
+        X = np.array(X)
+        if X.ndim == 1:
+            X = X.reshape(1, -1)
+            
+        preds = []
+        for x in X:
+            posteriors = []
+            for c in self.classes:
+                mean = self.parameters[c]['mean']
+                var = self.parameters[c]['var']
+                
+                term1 = -0.5 * np.sum(np.log(2 * np.pi * var))
+                term2 = -0.5 * np.sum(((x - mean) ** 2) / var)
+                
+                posterior = term1 + term2
+                posteriors.append(posterior)
+            preds.append(self.classes[np.argmax(posteriors)])
+        return preds[0] if len(preds) == 1 else np.array(preds)

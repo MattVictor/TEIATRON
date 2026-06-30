@@ -337,6 +337,57 @@ class ChartsExpandedPage(BaseExpandedPage):
                 self.plot_widget.addItem(reta)
                 self.plot_widget.plot([], [], pen=pen_reta, name=f"Fronteira 2D: {equacao_legenda}")
 
+            # --- SUPERFÍCIE QUADRÁTICA: BAYES ÓTIMO ---
+            elif model_name == "OptimalBayesMAP":
+                import numpy as np
+                import pyqtgraph as pg
+                
+                classes_treinadas = self.trained_model.classes
+                if len(classes_treinadas) == 2:
+                    c1, c2 = classes_treinadas[0], classes_treinadas[1]
+                    W, w, w0 = self.trained_model.get_decision_surface(c1, c2)
+                    
+                    # Identificar os eixos X e Y atuais e as dimensões "escondidas"
+                    idx_x = keys.index(x_key)
+                    idx_y = keys.index(y_key)
+                    hid_idx = [i for i in range(4) if i not in [idx_x, idx_y]]
+                    
+                    # Fixar as dimensões escondidas na média do dataset
+                    hid_vals = [np.mean(self.current_dataset[keys[i]]) for i in hid_idx]
+                    
+                    # Criar malha (Grid) 2D
+                    res = 150 # Resolução da curva
+                    x_min, x_max = min(x) - 1, max(x) + 1
+                    y_min, y_max = min(y) - 1, max(y) + 1
+                    
+                    xi = np.linspace(x_min, x_max, res)
+                    yi = np.linspace(y_min, y_max, res)
+                    Z = np.zeros((res, res))
+                    
+                    # Avaliar a função discriminante em cada ponto do plano
+                    for i, xv in enumerate(xi):
+                        for j, yv in enumerate(yi):
+                            vec = np.zeros(4)
+                            vec[idx_x] = xv
+                            vec[idx_y] = yv
+                            vec[hid_idx[0]] = hid_vals[0]
+                            vec[hid_idx[1]] = hid_vals[1]
+                            
+                            # Avalia f(X) = X^T * W * X + w^T * X + w0
+                            val = np.dot(vec.T, np.dot(W, vec)) + np.dot(w.T, vec) + w0
+                            Z[i, j] = val
+                    
+                    # Usar IsocurveItem para plotar a linha exata onde f(X) == 0
+                    contour = pg.IsocurveItem(data=Z, level=0.0, pen=pg.mkPen(color=WARNING_COLOR, width=2, style=Qt.PenStyle.DashLine))
+                    
+                    # Mapear as coordenadas da matriz gerada para as coordenadas reais do gráfico
+                    tr = pg.QtGui.QTransform()
+                    tr.translate(x_min, y_min)
+                    tr.scale((x_max - x_min) / res, (y_max - y_min) / res)
+                    contour.setTransform(tr)
+                    
+                    self.plot_widget.addItem(contour)
+            
             elif model_name == "MaxDistanceClassifier":
                 self.plot_widget.plot([], [], pen=None, name="Critério: Minimização da Distância Máxima")
 

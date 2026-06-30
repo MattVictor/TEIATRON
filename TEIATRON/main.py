@@ -366,6 +366,40 @@ class MainWindow(QMainWindow):
                 if erros[-1] > 0:
                     self.page_algo.append_log("★ Conclusão: Como esperado, o modelo não zerou os erros! O hiperplano linear não consegue separar o XOR. ★")
 
+            # --- Adicione isto no bloco de TREINAMENTO (MOTOR ML) ---
+            elif params['Algoritmo'] in ["Bayes Ótimo", "Naive Bayes"]:
+                import numpy as np
+                from ml_engine import OptimalBayesMAP, NaiveBayesMAP
+                
+                X_train_np = np.array(X_train)
+                y_train_np = np.array(y_train)
+                
+                if params['Algoritmo'] == "Bayes Ótimo":
+                    self.current_model = OptimalBayesMAP()
+                    self.current_model.fit(X_train_np, y_train_np)
+                    self.page_algo.append_log("\n[TREINAMENTO BAYES ÓTIMO CONCLUÍDO]")
+                    self.page_algo.append_log("Distribuições Gausianas Multivariadas calculadas.")
+                    
+                    # Cálculo e Log da Superfície de Decisão Quadrática
+                    classes_treinadas = self.current_model.classes
+                    if len(classes_treinadas) >= 2:
+                        self.page_algo.append_log("\n[SUPERFÍCIES DE DECISÃO (W, w, w0)]")
+                        for i in range(len(classes_treinadas)):
+                            for j in range(i + 1, len(classes_treinadas)):
+                                c1, c2 = classes_treinadas[i], classes_treinadas[j]
+                                W, w, w0 = self.current_model.get_decision_surface(c1, c2)
+                                
+                                self.page_algo.append_log(f"► Fronteira: {c1} x {c2}")
+                                self.page_algo.append_log(f"  Matriz W:\n{np.array_str(W, precision=3, suppress_small=True)}")
+                                self.page_algo.append_log(f"  Vetor w: {np.round(w, 3)}")
+                                self.page_algo.append_log(f"  Const w0: {w0:.3f}\n")
+                                
+                elif params['Algoritmo'] == "Naive Bayes":
+                    self.current_model = NaiveBayesMAP()
+                    self.current_model.fit(X_train_np, y_train_np)
+                    self.page_algo.append_log("\n[TREINAMENTO NAIVE BAYES CONCLUÍDO]")
+                    self.page_algo.append_log("Médias e Variâncias calculadas (assumindo independência).")
+            
             # --- 3. ATUALIZAR GRÁFICOS ---
             self.page_algo.append_log("\n[SISTEMA] Atualizando gráficos...")
             self.page_charts.clear_charts()
