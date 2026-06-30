@@ -29,7 +29,7 @@ class MainWindow(QMainWindow):
         self.card_input = InputCard(
             on_expand_callback=lambda: self.stack.setCurrentIndex(1),
             on_classify_callback=self.classify_point # Conecta o botão ao Main
-        )     
+        )
         self.card_charts = ChartsCard(lambda: self.stack.setCurrentIndex(2))
         
         # Passando o callback de treinamento para o Algoritmo
