@@ -339,9 +339,6 @@ class ChartsExpandedPage(BaseExpandedPage):
 
             # --- SUPERFÍCIE QUADRÁTICA: BAYES ÓTIMO ---
             elif model_name == "OptimalBayesMAP":
-                import numpy as np
-                import pyqtgraph as pg
-                
                 classes_treinadas = self.trained_model.classes
                 if len(classes_treinadas) == 2:
                     c1, c2 = classes_treinadas[0], classes_treinadas[1]

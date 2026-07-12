@@ -3,20 +3,44 @@ import pingouin as pg
 import urllib.request
 import io
 
-# 1. Carregando a base Iris diretamente para um DataFrame do Pandas
-url = "https://archive.ics.uci.edu/ml/machine-learning-databases/iris/iris.data"
-response = urllib.request.urlopen(url)
-csv_data = response.read().decode('utf-8')
+# # 1. Carregando a base Iris diretamente para um DataFrame do Pandas
+# url = "https://archive.ics.uci.edu/ml/machine-learning-databases/iris/iris.data"
+# response = urllib.request.urlopen(url)
+# csv_data = response.read().decode('utf-8')
+
+# # Definindo colunas
+# col_names = ["sepal_length","sepal_width","petal_length","petal_width","species"]
+# df = pd.read_csv(io.StringIO(csv_data), header=None, names=col_names)
+# df = df.dropna() # Removendo a última linha vazia, se houver
+
+# # 2. Separando por classes
+# setosa = df[df['species'] == 'Iris-setosa'].drop(columns=['species'])
+# versicolor = df[df['species'] == 'Iris-versicolor'].drop(columns=['species'])
+# virginica = df[df['species'] == 'Iris-virginica'].drop(columns=['species'])
+
+# print(setosa)
+
+# # 1. (Optional) Prove it to yourself by checking the types. 
+# # You will likely see 'object' instead of 'float64'
+# print(setosa.dtypes)
+
+# # 2. Force the entire dataframe into float numbers
+# setosa = setosa.astype(float)
 
 # Definindo colunas
-col_names = ['sepal_length', 'sepal_width', 'petal_length', 'petal_width', 'species']
-df = pd.read_csv(io.StringIO(csv_data), header=None, names=col_names)
+col_names = ["Sepal length","Sepal width","Petal length","Petal width","Species"]
+df = pd.read_csv("TEIATRON/Iris_data.csv", header=None, names=col_names)
 df = df.dropna() # Removendo a última linha vazia, se houver
 
 # 2. Separando por classes
-setosa = df[df['species'] == 'Iris-setosa'].drop(columns=['species'])
-versicolor = df[df['species'] == 'Iris-versicolor'].drop(columns=['species'])
-virginica = df[df['species'] == 'Iris-virginica'].drop(columns=['species'])
+setosa = df[df['Species'] == 'setosa'].drop(columns=['Species'])
+versicolor = df[df['Species'] == 'versicolor'].drop(columns=['Species'])
+virginica = df[df['Species'] == 'virginica'].drop(columns=['Species'])
+
+# 2. Force the entire dataframe into float numbers
+setosa = setosa.astype(float)
+versicolor = versicolor.astype(float)
+virginica = versicolor.astype(float)
 
 # 3. Executando o Teste de Henze-Zirkler
 print("--- Teste de Normalidade Multivariada (Henze-Zirkler) ---")
