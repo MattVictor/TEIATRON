@@ -38,7 +38,7 @@ class ClassifierApp(QMainWindow):
         
         # Reinicializa os modelos para evitar que continuem aprendendo do estado anterior
         self.modelos = {
-            "Feedforward (MLP)": MLPClassifier(hidden_layer_sizes=(10,), max_iter=2000),
+            "Feedforward (MLP)": MLPClassifier(hidden_layer_sizes=(10,2), max_iter=2000),
             "Bayes Ótimo (QDA)": QuadraticDiscriminantAnalysis(),
             "Naive Bayes": GaussianNB()
         }
