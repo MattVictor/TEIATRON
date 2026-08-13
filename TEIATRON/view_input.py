@@ -1,6 +1,4 @@
 # view_input.py
-import csv
-import random
 from PyQt6.QtWidgets import (
     QLabel, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QDoubleSpinBox, 
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, 
@@ -54,9 +52,11 @@ class InputCard(BaseCard):
         msg_box.exec()
 
 class InputExpandedPage(BaseExpandedPage):
-    def __init__(self, update_card_callback, on_back_callback):
+    def __init__(self, update_card_callback, on_back_callback, on_import_callback, on_split_callback):
         super().__init__("Entrada de Dados", on_back_callback)
         self.update_card_callback = update_card_callback
+        self.on_import_callback = on_import_callback
+        self.on_split_callback = on_split_callback
         self.current_class = None
         
         container = QWidget()
@@ -160,85 +160,23 @@ class InputExpandedPage(BaseExpandedPage):
         file_path, _ = QFileDialog.getOpenFileName(self, "Importar CSV", "", "Arquivos CSV (*.csv)")
         if not file_path:
             return
-
-        with open(file_path, newline='', encoding='utf-8') as f:
-            reader = csv.reader(f)
-            data = list(reader)
-
-        if not data or len(data) < 2:
-            return
-
-        headers = data[0]
-        rows = data[1:]
-
-        self.table.setRowCount(len(rows))
-        self.table.setColumnCount(len(headers))
-        self.table.setHorizontalHeaderLabels(headers)
-
-        for i, row_data in enumerate(rows):
-            for j, val in enumerate(row_data):
-                self.table.setItem(i, j, QTableWidgetItem(val.strip()))
+            
+        try:
+            headers, data = self.on_import_callback(file_path)
+            self.render_table(headers, data)
+        except Exception as e:
+            QMessageBox.critical(self, "Erro de Importação", str(e))
 
     def apply_split(self, stratified):
-        """Aplica a aleatorização e divide entre Treino e Teste com base na SpinBox."""
-        rows = self.table.rowCount()
-        cols = self.table.columnCount()
-        
-        if rows == 0:
-            return
-
-        # 1. Extrair os cabeçalhos atuais
-        headers = []
-        for j in range(cols):
-            item = self.table.horizontalHeaderItem(j)
-            headers.append(item.text() if item else f"Col {j}")
-
-        # Identificar onde está a classe e verificar se já existe a coluna "Conjunto"
-        has_conjunto = "Conjunto" in headers
-        class_col_idx = cols - 2 if has_conjunto else cols - 1
-
-        if not has_conjunto:
-            headers.append("Conjunto")
-        
-        # 2. Extrair os dados de todas as linhas
-        all_data = []
-        for i in range(rows):
-            row_data = []
-            for j in range(cols):
-                row_data.append(self.table.item(i, j).text())
-            if not has_conjunto:
-                row_data.append("") # Espaço reservado para a nova coluna "Conjunto"
-            all_data.append(row_data)
-
         train_ratio = self.spin_pct.value() / 100.0
+        headers, data = self.on_split_callback(stratified, train_ratio)
+        self.render_table(headers, data)
 
-        # 3. Aplicar Lógica de Separação
-        if stratified:
-            # Agrupar por classe
-            groups = {}
-            for row in all_data:
-                c = row[class_col_idx]
-                if c not in groups:
-                    groups[c] = []
-                groups[c].append(row)
+    def render_table(self, headers, all_data):
+        """Apenas renderiza a matriz de dados na tabela (Visão Passiva)."""
+        if not all_data:
+            return
             
-            final_data = []
-            for c, group in groups.items():
-                random.shuffle(group) # Embaralha DENTRO da classe
-                split_idx = int(len(group) * train_ratio)
-                for i, row in enumerate(group):
-                    row[-1] = "Treino" if i < split_idx else "Teste"
-                    final_data.append(row)
-            
-            # Reatribui all_data mantendo as classes agrupadas visualmente na tabela
-            all_data = final_data 
-        else:
-            random.shuffle(all_data) # Embaralha GLOBALMENTE ignorando classes
-            split_idx = int(len(all_data) * train_ratio)
-            for i, row in enumerate(all_data):
-                row[-1] = "Treino" if i < split_idx else "Teste"
-
-        # 4. Reescrever a tabela com os novos dados
         self.table.clearContents()
         self.table.setColumnCount(len(headers))
         self.table.setHorizontalHeaderLabels(headers)
@@ -246,7 +184,7 @@ class InputExpandedPage(BaseExpandedPage):
 
         for i, row in enumerate(all_data):
             for j, val in enumerate(row):
-                item = QTableWidgetItem(val)
+                item = QTableWidgetItem(str(val))
                 
                 # Destacar a coluna "Conjunto" com cores para visualização rápida
                 if j == len(headers) - 1:
@@ -297,53 +235,3 @@ class InputExpandedPage(BaseExpandedPage):
             preview += f"\n\nClasse Real: Desconhecida"
 
         self.update_card_callback(preview)
-
-    def get_full_dataset(self):
-        """Retorna o dataset completo, as classes e as marcações de Treino/Teste."""
-        rows = self.table.rowCount()
-        cols = self.table.columnCount()
-        
-        if rows == 0:
-            raise Exception("Dataset não carregado")
-            
-        keys = ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"]
-        dataset = {key: [] for key in keys}
-        class_data = []
-        conjunto_data = [] # Nova lista para Treino/Teste
-
-        # Verifica se a coluna Conjunto existe
-        headers = []
-        for j in range(cols):
-            item = self.table.horizontalHeaderItem(j)
-            headers.append(item.text() if item else "")
-        has_conjunto = "Conjunto" in headers
-        conj_idx = headers.index("Conjunto") if has_conjunto else -1
-
-        for i in range(rows):
-            try:
-                for j, key in enumerate(keys):
-                    if j < cols:
-                        val = float(self.table.item(i, j).text().replace(',', '.'))
-                        dataset[key].append(val)
-                    else:
-                        dataset[key].append(0.0)
-                
-                # Coleta a Classe
-                if cols >= 6:
-                    c = self.table.item(i, 4).text().strip()
-                elif cols >= 5:
-                    c = self.table.item(i, 4).text().strip()
-                elif cols > 2:
-                    c = self.table.item(i, cols-1).text().strip()
-                else:
-                    c = "Desconhecida"
-                    
-                # Coleta o Conjunto (Se não foi dividido, assume tudo como Treino)
-                conj = self.table.item(i, conj_idx).text().strip() if has_conjunto else "Treino"
-                    
-                class_data.append(c)
-                conjunto_data.append(conj)
-            except Exception:
-                pass
-                
-        return dataset, class_data, conjunto_data

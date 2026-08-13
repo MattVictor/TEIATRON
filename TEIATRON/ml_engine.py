@@ -2,12 +2,39 @@
 import math
 import numpy as np
 
-class MinDistanceClassifier:
+class BaseClassifier:
+    def train(self, X_train, y_train, **kwargs):
+        raise NotImplementedError
+        
+    def predict(self, novo_ponto):
+        raise NotImplementedError
+        
+    def get_logs(self):
+        return []
+        
+    def get_plot_data(self, **kwargs):
+        """Retorna dicionário de dados geométricos agnósticos para a UI plotar"""
+        return {}
+        
+    @classmethod
+    def get_hyperparameters(cls):
+        """Retorna os hiperparâmetros necessários para gerar a UI dinamicamente."""
+        return []
+
+class MinDistanceClassifier(BaseClassifier):
+    @classmethod
+    def get_hyperparameters(cls):
+        return [
+            {"name": "Multiclasse", "type": "bool", "default": True},
+            {"name": "Classe 1", "type": "class_selector", "default": "Iris-setosa"},
+            {"name": "Classe 2", "type": "class_selector", "default": "Iris-versicolor"}
+        ]
+
     def __init__(self):
         self.centroids = {}
         self.classes_trained = []
 
-    def train(self, X_train, y_train):
+    def train(self, X_train, y_train, **kwargs):
         """
         Calcula e armazena o centróide de cada classe.
         X_train: lista de listas (cada sublista é um ponto ex: [5.1, 3.5, 1.4, 0.2])
@@ -65,14 +92,57 @@ class MinDistanceClassifier:
                 melhor_classe = classe
 
         return melhor_classe, distancias_calculadas
+
+    def get_plot_data(self, **kwargs):
+        x_key = kwargs.get('x_key')
+        y_key = kwargs.get('y_key')
+        keys = kwargs.get('keys')
+        if not x_key or not y_key or not keys: return {}
+        
+        idx_x = keys.index(x_key)
+        idx_y = keys.index(y_key)
+        
+        points = []
+        for c_name, coords in self.centroids.items():
+            cx, cy = coords[idx_x], coords[idx_y]
+            points.append({"x": cx, "y": cy, "name": f"Centróide {c_name}", "symbol": "x", "size": 15, "color": "w"})
+            
+        lines = []
+        if len(self.classes_trained) == 2:
+            c1_coords = self.centroids[self.classes_trained[0]]
+            c2_coords = self.centroids[self.classes_trained[1]]
+            nx = c2_coords[idx_x] - c1_coords[idx_x]
+            ny = c2_coords[idx_y] - c1_coords[idx_y]
+            mx = (c1_coords[idx_x] + c2_coords[idx_x]) / 2.0
+            my = (c1_coords[idx_y] + c2_coords[idx_y]) / 2.0
+            
+            if ny != 0:
+                angulo_deg = math.degrees(math.atan2(-nx, ny))
+                a = -nx / ny
+                b = my - (a * mx)
+                equacao = f"g(x) = {a:.2f}x {'+' if b >= 0 else '-'} {abs(b):.2f}"
+            else:
+                angulo_deg = 90
+                equacao = f"g(x) -> x = {mx:.2f}"
+            lines.append({"angle": angulo_deg, "pos": (mx, my), "name": equacao})
+            
+        return {"points": points, "lines": lines}
     
-class MaxDistanceClassifier:
+class MaxDistanceClassifier(BaseClassifier):
+    @classmethod
+    def get_hyperparameters(cls):
+        return [
+            {"name": "Multiclasse", "type": "bool", "default": True},
+            {"name": "Classe 1", "type": "class_selector", "default": "Iris-setosa"},
+            {"name": "Classe 2", "type": "class_selector", "default": "Iris-versicolor"}
+        ]
+
     def __init__(self):
         self.X_train = []
         self.y_train = []
         self.classes_trained = []
 
-    def train(self, X_train, y_train):
+    def train(self, X_train, y_train, **kwargs):
         """
         Armazena os dados para cálculo posterior da distância máxima.
         """
@@ -101,15 +171,37 @@ class MaxDistanceClassifier:
                 
         melhor_classe = min(distancia_maxima, key=distancia_maxima.get)
         return melhor_classe, distancia_maxima
+        
+    def get_plot_data(self, **kwargs):
+        return {"empty_legends": ["Critério: Minimização da Distância Máxima"]}
     
-class PerceptronClassifier:
+class PerceptronClassifier(BaseClassifier):
+    @classmethod
+    def get_hyperparameters(cls):
+        return [
+            {"name": "Regra Delta", "type": "bool", "default": False},
+            {"name": "Estratégia", "type": "options", "choices": ["Clássico", "Um contra todos"], "default": "Clássico"},
+            {"name": "Classe 1", "type": "class_selector", "default": "Iris-setosa"},
+            {"name": "Classe 2", "type": "class_selector", "default": "Iris-versicolor"},
+            {"name": "Classe Alvo", "type": "class_selector", "default": "Iris-setosa"},
+            {"name": "Épocas", "type": "int", "min": 1, "max": 100000, "default": 100},
+            {"name": "Learning Rate", "type": "float", "min": 0.0001, "max": 10.0, "default": 0.01},
+            {"name": "Bias Inicial", "type": "float", "min": -100.0, "max": 100.0, "default": 0.0},
+            {"name": "Pesos Iniciais", "type": "string", "default": "0.0, 0.0, 0.0, 0.0"}
+        ]
+
     def __init__(self):
         self.pesos = []
         self.class_map = {}
         self.reverse_map = {}
         self.historico_erros = []
 
-    def train(self, X_train, y_train, classe_alvo, epocas, learning_rate, pesos_iniciais, regra_delta=False):
+    def train(self, X_train, y_train, **kwargs):
+        classe_alvo = kwargs.get('classe_alvo')
+        epocas = kwargs.get('epocas', 100)
+        learning_rate = kwargs.get('learning_rate', 0.01)
+        pesos_iniciais = kwargs.get('pesos_iniciais', [0,0,0,0,0])
+        regra_delta = kwargs.get('regra_delta', False)
         # 1. Mapeamento de Classes (Um contra todos ou Binário Clássico)
         # O alvo vira 1, o resto vira 0.
         self.class_map = {classe_alvo: 1}
@@ -173,6 +265,46 @@ class PerceptronClassifier:
         nome_classe = self.reverse_map[classe_predita]
         
         return nome_classe, {"Ativação (Soma Ponderada)": ativacao}
+        
+    def get_plot_data(self, **kwargs):
+        x_key = kwargs.get('x_key')
+        y_key = kwargs.get('y_key')
+        keys = kwargs.get('keys')
+        dataset = kwargs.get('dataset')
+        if not x_key or not y_key or not keys or not dataset: return {}
+        
+        idx_x = keys.index(x_key)
+        idx_y = keys.index(y_key)
+        
+        b = self.pesos[0]
+        w_x = self.pesos[idx_x + 1]
+        w_y = self.pesos[idx_y + 1]
+        
+        effective_bias = b
+        for i, k in enumerate(keys):
+            if k != x_key and k != y_key:
+                dados_coluna = dataset[k]
+                if len(dados_coluna) > 0:
+                    media_coluna = sum(dados_coluna) / len(dados_coluna)
+                    effective_bias += self.pesos[i + 1] * media_coluna
+                    
+        lines = []
+        if w_y != 0:
+            a = -w_x / w_y
+            intercept = -effective_bias / w_y
+            angulo_deg = math.degrees(math.atan(a))
+            mx, my = 0, intercept 
+            sinal_wy = "+" if w_y >= 0 else "-"
+            sinal_b = "+" if effective_bias >= 0 else "-"
+            equacao = f"{w_x:.2f}x {sinal_wy} {abs(w_y):.2f}y {sinal_b} {abs(effective_bias):.2f} = 0"
+        else:
+            angulo_deg = 90
+            mx, my = -effective_bias / w_x if w_x != 0 else 0, 0
+            sinal_b = "+" if effective_bias >= 0 else "-"
+            equacao = f"{w_x:.2f}x {sinal_b} {abs(effective_bias):.2f} = 0"
+            
+        lines.append({"angle": angulo_deg, "pos": (mx, my), "name": f"Fronteira 2D: {equacao}"})
+        return {"lines": lines}
     
 class ClassificadorMetricas:
     def __init__(self, matriz):
@@ -238,8 +370,8 @@ class ClassificadorMetricas:
             return 0
         return ((1 + b**2) * prec * rec) / ((b**2 * prec) + rec)
     
-class OptimalBayesMAP:
-    def fit(self, X, y):
+class OptimalBayesMAP(BaseClassifier):
+    def train(self, X, y, **kwargs):
         self.classes = np.unique(y)
         self.parameters = {}
         
@@ -297,11 +429,51 @@ class OptimalBayesMAP:
         
         return W, w, w0
 
+    def get_plot_data(self, **kwargs):
+        x_key = kwargs.get('x_key')
+        y_key = kwargs.get('y_key')
+        keys = kwargs.get('keys')
+        dataset = kwargs.get('dataset')
+        x_data = kwargs.get('x_data')
+        y_data = kwargs.get('y_data')
+        
+        if not x_key or not y_key or not keys or not dataset or len(self.classes) != 2: 
+            return {}
+            
+        c1, c2 = self.classes[0], self.classes[1]
+        W, w, w0 = self.get_decision_surface(c1, c2)
+        
+        idx_x = keys.index(x_key)
+        idx_y = keys.index(y_key)
+        hid_idx = [i for i in range(4) if i not in [idx_x, idx_y]]
+        
+        hid_vals = [np.mean(dataset[keys[i]]) for i in hid_idx]
+        
+        res = 150
+        x_min, x_max = min(x_data) - 1, max(x_data) + 1
+        y_min, y_max = min(y_data) - 1, max(y_data) + 1
+        
+        xi = np.linspace(x_min, x_max, res)
+        yi = np.linspace(y_min, y_max, res)
+        Z = np.zeros((res, res))
+        
+        for i, xv in enumerate(xi):
+            for j, yv in enumerate(yi):
+                vec = np.zeros(4)
+                vec[idx_x] = xv
+                vec[idx_y] = yv
+                vec[hid_idx[0]] = hid_vals[0]
+                vec[hid_idx[1]] = hid_vals[1]
+                val = np.dot(vec.T, np.dot(W, vec)) + np.dot(w.T, vec) + w0
+                Z[i, j] = val
+                
+        return {"contours": [{"Z": Z, "level": 0.0, "x_min": x_min, "x_max": x_max, "y_min": y_min, "y_max": y_max, "res": res}]}
+
 # =====================================================================
 # CLASSIFICADOR NAIVE BAYES - MAP
 # =====================================================================
-class NaiveBayesMAP:
-    def fit(self, X, y):
+class NaiveBayesMAP(BaseClassifier):
+    def train(self, X, y, **kwargs):
         self.classes = np.unique(y)
         self.parameters = {}
         
@@ -330,3 +502,122 @@ class NaiveBayesMAP:
                 posteriors.append(posterior)
             preds.append(self.classes[np.argmax(posteriors)])
         return preds[0] if len(preds) == 1 else np.array(preds)
+
+# =====================================================================
+# CLASSIFICADOR REDE NEURAL (MLP 1 CAMADA OCULTA)
+# =====================================================================
+import random
+
+class NeuralNetworkClassifier(BaseClassifier):
+    @classmethod
+    def get_hyperparameters(cls):
+        return [
+            {"name": "Épocas", "type": "int", "min": 1, "max": 100000, "default": 10000},
+            {"name": "Learning Rate", "type": "float", "min": 0.0001, "max": 10.0, "default": 0.5},
+            {"name": "Neurônios Ocultos", "type": "int", "min": 1, "max": 100, "default": 2}
+        ]
+
+    def __init__(self):
+        self.historico_erros = []
+        self.W_ih = []
+        self.b_h = []
+        self.W_ho = []
+        self.b_o = []
+        self.reverse_map = {}
+
+    def sigmoid(self, x):
+        if x < -700: return 0.0
+        return 1 / (1 + math.exp(-x))
+
+    def train(self, X_train, y_train, **kwargs):
+        epocas = kwargs.get('epocas', 10000)
+        lr = kwargs.get('learning_rate', 0.5)
+        hidden_neurons = kwargs.get('hidden_neurons', 2)
+        
+        n_inputs = len(X_train[0])
+        n_outputs = 2 
+        
+        classes = sorted(list(set(y_train)))
+        
+        self.reverse_map = {0: classes[0], 1: classes[1] if len(classes) > 1 else "Resto"}
+        
+        y_mapped = []
+        for y in y_train:
+            if y == classes[0]:
+                y_mapped.append([0.0, 0.0])
+            else:
+                y_mapped.append([1.0, 1.0])
+                
+        self.W_ih = [[random.uniform(-1, 1) for _ in range(n_inputs)] for _ in range(hidden_neurons)]
+        self.b_h = [random.uniform(-1, 1) for _ in range(hidden_neurons)]
+        self.W_ho = [[random.uniform(-1, 1) for _ in range(hidden_neurons)] for _ in range(n_outputs)]
+        self.b_o = [random.uniform(-1, 1) for _ in range(n_outputs)]
+        
+        self.historico_erros = []
+        
+        for epoca in range(epocas):
+            erro_epoca = 0
+            
+            for i in range(len(X_train)):
+                entrada = X_train[i]
+                alvo = y_mapped[i]
+                
+                # FORWARD PASS
+                out_h = [0.0] * hidden_neurons
+                for j in range(hidden_neurons):
+                    net = sum(self.W_ih[j][k] * entrada[k] for k in range(n_inputs)) + self.b_h[j]
+                    out_h[j] = self.sigmoid(net)
+                    
+                out_o = [0.0] * n_outputs
+                for j in range(n_outputs):
+                    net = sum(self.W_ho[j][k] * out_h[k] for k in range(hidden_neurons)) + self.b_o[j]
+                    out_o[j] = self.sigmoid(net)
+                    
+                erro_padrao = 0.5 * sum((alvo[k] - out_o[k])**2 for k in range(n_outputs))
+                erro_epoca += erro_padrao
+                
+                # BACKWARD PASS
+                delta_o = [0.0] * n_outputs
+                for j in range(n_outputs):
+                    delta_o[j] = (alvo[j] - out_o[j]) * out_o[j] * (1 - out_o[j])
+                    
+                delta_h = [0.0] * hidden_neurons
+                for j in range(hidden_neurons):
+                    soma_erros = sum(delta_o[k] * self.W_ho[k][j] for k in range(n_outputs))
+                    delta_h[j] = soma_erros * out_h[j] * (1 - out_h[j])
+                    
+                # UPDATE WEIGHTS
+                for j in range(n_outputs):
+                    for k in range(hidden_neurons):
+                        self.W_ho[j][k] += lr * delta_o[j] * out_h[k]
+                    self.b_o[j] += lr * delta_o[j]
+                    
+                for j in range(hidden_neurons):
+                    for k in range(n_inputs):
+                        self.W_ih[j][k] += lr * delta_h[j] * entrada[k]
+                    self.b_h[j] += lr * delta_h[j]
+                    
+            self.historico_erros.append(erro_epoca / len(X_train))
+
+    def predict(self, novo_ponto):
+        if not self.W_ih:
+            raise Exception("Modelo ainda não treinado.")
+        
+        n_inputs = len(novo_ponto)
+        hidden_neurons = len(self.b_h)
+        n_outputs = len(self.b_o)
+        
+        out_h = [0.0] * hidden_neurons
+        for j in range(hidden_neurons):
+            net = sum(self.W_ih[j][k] * novo_ponto[k] for k in range(n_inputs)) + self.b_h[j]
+            out_h[j] = self.sigmoid(net)
+            
+        out_o = [0.0] * n_outputs
+        for j in range(n_outputs):
+            net = sum(self.W_ho[j][k] * out_h[k] for k in range(hidden_neurons)) + self.b_o[j]
+            out_o[j] = self.sigmoid(net)
+            
+        classe_predita = 1 if out_o[0] >= 0.5 else 0
+        nome_classe = self.reverse_map.get(classe_predita, "Desconhecido")
+        
+        return nome_classe, {"Ativação O1": out_o[0], "Ativação O2": out_o[1]}

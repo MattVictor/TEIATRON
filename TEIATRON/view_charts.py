@@ -261,132 +261,37 @@ class ChartsExpandedPage(BaseExpandedPage):
                         self.plot_widget.plot(x[idx_ts], y[idx_ts], pen=None, symbol='t', symbolBrush=brush, symbolSize=9, name=f"{cls_name} (Teste)")
                         self.preview_widget.plot(x[idx_ts], y[idx_ts], pen=None, symbol='t', symbolBrush=brush, symbolSize=4)
         
-        # 2. DESENHA A MATEMÁTICA DO CLASSIFICADOR (Reta)
+        # 2. DESENHA A MATEMÁTICA DO CLASSIFICADOR (Agnóstico)
         if hasattr(self, 'trained_model'):
-            model_name = self.trained_model.__class__.__name__
-            keys = ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"]
-            idx_x = keys.index(x_key)
-            idx_y = keys.index(y_key)
+            kwargs = {
+                'keys': ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"],
+                'x_key': x_key,
+                'y_key': y_key,
+                'dataset': self.current_dataset,
+                'x_data': x,
+                'y_data': y
+            }
+            plot_data = self.trained_model.get_plot_data(**kwargs)
             
-            if model_name == "MinDistanceClassifier":
-                centroides = self.trained_model.centroids
-                classes_treinadas = self.trained_model.classes_trained
+            for pt in plot_data.get("points", []):
+                self.plot_widget.plot([pt["x"]], [pt["y"]], pen=None, symbol=pt["symbol"], symbolPen=pg.mkPen(color=pt["color"], width=3), symbolSize=pt["size"], name=pt["name"])
                 
-                for c_name, coords in centroides.items():
-                    cx, cy = coords[idx_x], coords[idx_y]
-                    self.plot_widget.plot([cx], [cy], pen=None, symbol='x', symbolPen=pg.mkPen(color='w', width=3), symbolSize=15, name=f"Centróide {c_name}")
-                
-                if len(classes_treinadas) == 2:
-                    c1_coords = centroides[classes_treinadas[0]]
-                    c2_coords = centroides[classes_treinadas[1]]
-                    nx = c2_coords[idx_x] - c1_coords[idx_x]
-                    ny = c2_coords[idx_y] - c1_coords[idx_y]
-                    mx = (c1_coords[idx_x] + c2_coords[idx_x]) / 2.0
-                    my = (c1_coords[idx_y] + c2_coords[idx_y]) / 2.0
-                    
-                    if ny != 0:
-                        angulo_deg = math.degrees(math.atan2(-nx, ny))
-                        a = -nx / ny
-                        b = my - (a * mx)
-                        equacao_legenda = f"g(x) = {a:.2f}x {'+' if b >= 0 else '-'} {abs(b):.2f}"
-                    else:
-                        angulo_deg = 90
-                        equacao_legenda = f"g(x) -> x = {mx:.2f}"
-                    
-                    pen_reta = pg.mkPen(color=WARNING_COLOR, width=2, style=Qt.PenStyle.DashLine)
-                    reta = pg.InfiniteLine(pos=(mx, my), angle=angulo_deg, pen=pen_reta)
-                    self.plot_widget.addItem(reta)
-                    self.plot_widget.plot([], [], pen=pen_reta, name=equacao_legenda)
-
-            # --- RETA DO PERCEPTRON (PROJEÇÃO 4D -> 2D) ---
-            elif model_name == "PerceptronClassifier":
-                pesos = self.trained_model.pesos
-                
-                b = pesos[0]
-                w_x = pesos[idx_x + 1]
-                w_y = pesos[idx_y + 1]
-                
-                # MATEMÁTICA: Como o hiperplano tem 4 dimensões (W1*X1 + W2*X2 + W3*X3 + W4*X4 + B = 0),
-                # para desenhar uma linha 2D, substituímos as outras 2 variáveis pelas suas médias.
-                effective_bias = b
-                for i, k in enumerate(keys):
-                    if k != x_key and k != y_key:
-                        dados_coluna = self.current_dataset[k]
-                        if len(dados_coluna) > 0:
-                            media_coluna = sum(dados_coluna) / len(dados_coluna)
-                            effective_bias += pesos[i + 1] * media_coluna
-                
-                # Agora traçamos Wx*X + Wy*Y + Effective_Bias = 0
-                if w_y != 0:
-                    a = -w_x / w_y
-                    intercept = -effective_bias / w_y
-                    angulo_deg = math.degrees(math.atan(a))
-                    mx, my = 0, intercept 
-                    
-                    sinal_wy = "+" if w_y >= 0 else "-"
-                    sinal_b = "+" if effective_bias >= 0 else "-"
-                    equacao_legenda = f"{w_x:.2f}x {sinal_wy} {abs(w_y):.2f}y {sinal_b} {abs(effective_bias):.2f} = 0"
-                else:
-                    angulo_deg = 90
-                    mx, my = -effective_bias / w_x if w_x != 0 else 0, 0
-                    sinal_b = "+" if effective_bias >= 0 else "-"
-                    equacao_legenda = f"{w_x:.2f}x {sinal_b} {abs(effective_bias):.2f} = 0"
-                
+            for ln in plot_data.get("lines", []):
                 pen_reta = pg.mkPen(color=WARNING_COLOR, width=2, style=Qt.PenStyle.DashLine)
-                reta = pg.InfiniteLine(pos=(mx, my), angle=angulo_deg, pen=pen_reta)
+                reta = pg.InfiniteLine(pos=ln["pos"], angle=ln["angle"], pen=pen_reta)
                 self.plot_widget.addItem(reta)
-                self.plot_widget.plot([], [], pen=pen_reta, name=f"Fronteira 2D: {equacao_legenda}")
-
-            # --- SUPERFÍCIE QUADRÁTICA: BAYES ÓTIMO ---
-            elif model_name == "OptimalBayesMAP":
-                classes_treinadas = self.trained_model.classes
-                if len(classes_treinadas) == 2:
-                    c1, c2 = classes_treinadas[0], classes_treinadas[1]
-                    W, w, w0 = self.trained_model.get_decision_surface(c1, c2)
-                    
-                    # Identificar os eixos X e Y atuais e as dimensões "escondidas"
-                    idx_x = keys.index(x_key)
-                    idx_y = keys.index(y_key)
-                    hid_idx = [i for i in range(4) if i not in [idx_x, idx_y]]
-                    
-                    # Fixar as dimensões escondidas na média do dataset
-                    hid_vals = [np.mean(self.current_dataset[keys[i]]) for i in hid_idx]
-                    
-                    # Criar malha (Grid) 2D
-                    res = 150 # Resolução da curva
-                    x_min, x_max = min(x) - 1, max(x) + 1
-                    y_min, y_max = min(y) - 1, max(y) + 1
-                    
-                    xi = np.linspace(x_min, x_max, res)
-                    yi = np.linspace(y_min, y_max, res)
-                    Z = np.zeros((res, res))
-                    
-                    # Avaliar a função discriminante em cada ponto do plano
-                    for i, xv in enumerate(xi):
-                        for j, yv in enumerate(yi):
-                            vec = np.zeros(4)
-                            vec[idx_x] = xv
-                            vec[idx_y] = yv
-                            vec[hid_idx[0]] = hid_vals[0]
-                            vec[hid_idx[1]] = hid_vals[1]
-                            
-                            # Avalia f(X) = X^T * W * X + w^T * X + w0
-                            val = np.dot(vec.T, np.dot(W, vec)) + np.dot(w.T, vec) + w0
-                            Z[i, j] = val
-                    
-                    # Usar IsocurveItem para plotar a linha exata onde f(X) == 0
-                    contour = pg.IsocurveItem(data=Z, level=0.0, pen=pg.mkPen(color=WARNING_COLOR, width=2, style=Qt.PenStyle.DashLine))
-                    
-                    # Mapear as coordenadas da matriz gerada para as coordenadas reais do gráfico
-                    tr = pg.QtGui.QTransform()
-                    tr.translate(x_min, y_min)
-                    tr.scale((x_max - x_min) / res, (y_max - y_min) / res)
-                    contour.setTransform(tr)
-                    
-                    self.plot_widget.addItem(contour)
-            
-            elif model_name == "MaxDistanceClassifier":
-                self.plot_widget.plot([], [], pen=None, name="Critério: Minimização da Distância Máxima")
+                self.plot_widget.plot([], [], pen=pen_reta, name=ln["name"])
+                
+            for ct in plot_data.get("contours", []):
+                contour = pg.IsocurveItem(data=ct["Z"], level=ct["level"], pen=pg.mkPen(color=WARNING_COLOR, width=2, style=Qt.PenStyle.DashLine))
+                tr = pg.QtGui.QTransform()
+                tr.translate(ct["x_min"], ct["y_min"])
+                tr.scale((ct["x_max"] - ct["x_min"]) / ct["res"], (ct["y_max"] - ct["y_min"]) / ct["res"])
+                contour.setTransform(tr)
+                self.plot_widget.addItem(contour)
+                
+            for leg in plot_data.get("empty_legends", []):
+                self.plot_widget.plot([], [], pen=None, name=leg)
 
         # 3. PONTO CLASSIFICADO
         if hasattr(self, 'classified_point') and self.classified_point:

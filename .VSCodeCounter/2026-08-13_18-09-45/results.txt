@@ -1,0 +1,39 @@
+Date : 2026-08-13 18:09:45
+Directory : c:\Users\ACER\Documents\GitHub\TEIATRON\legacy
+Total : 13 files,  2180 codes, 1078 comments, 500 blanks, all 3758 lines
+
+Languages
++----------+------------+------------+------------+------------+------------+
+| language | files      | code       | comment    | blank      | total      |
++----------+------------+------------+------------+------------+------------+
+| Python   |         13 |      2,180 |      1,078 |        500 |      3,758 |
++----------+------------+------------+------------+------------+------------+
+
+Directories
++-------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                    | files      | code       | comment    | blank      | total      |
++-------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                       |         13 |      2,180 |      1,078 |        500 |      3,758 |
+| . (Files)                                                               |          9 |      1,552 |        901 |        299 |      2,752 |
+| 2807                                                                    |          4 |        628 |        177 |        201 |      1,006 |
++-------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++-------------------------------------------------------------------------+----------+------------+------------+------------+------------+
+| filename                                                                | language | code       | comment    | blank      | total      |
++-------------------------------------------------------------------------+----------+------------+------------+------------+------------+
+| c:\Users\ACER\Documents\GitHub\TEIATRON\legacy\2807\homem_galinha_nl.py | Python   |        134 |         19 |         36 |        189 |
+| c:\Users\ACER\Documents\GitHub\TEIATRON\legacy\2807\homem_galinha_wl.py | Python   |         98 |         19 |         25 |        142 |
+| c:\Users\ACER\Documents\GitHub\TEIATRON\legacy\2807\iris_nn.py          | Python   |        145 |         17 |         38 |        200 |
+| c:\Users\ACER\Documents\GitHub\TEIATRON\legacy\2807\xor_problem_nn.py   | Python   |        251 |        122 |        102 |        475 |
+| c:\Users\ACER\Documents\GitHub\TEIATRON\legacy\Bayes_Tests.py           | Python   |        121 |         53 |         55 |        229 |
+| c:\Users\ACER\Documents\GitHub\TEIATRON\legacy\base_components.py       | Python   |         37 |         63 |          3 |        103 |
+| c:\Users\ACER\Documents\GitHub\TEIATRON\legacy\config.py                | Python   |         12 |         19 |          6 |         37 |
+| c:\Users\ACER\Documents\GitHub\TEIATRON\legacy\main.py                  | Python   |        506 |         67 |        140 |        713 |
+| c:\Users\ACER\Documents\GitHub\TEIATRON\legacy\ml_engine.py             | Python   |        227 |         37 |         68 |        332 |
+| c:\Users\ACER\Documents\GitHub\TEIATRON\legacy\view_accuracy.py         | Python   |         59 |        112 |         12 |        183 |
+| c:\Users\ACER\Documents\GitHub\TEIATRON\legacy\view_algorithm.py        | Python   |         46 |        355 |          2 |        403 |
+| c:\Users\ACER\Documents\GitHub\TEIATRON\legacy\view_charts.py           | Python   |        300 |         93 |         10 |        403 |
+| c:\Users\ACER\Documents\GitHub\TEIATRON\legacy\view_input.py            | Python   |        244 |        102 |          3 |        349 |
+| Total                                                                   |          |      2,180 |      1,078 |        500 |      3,758 |
++-------------------------------------------------------------------------+----------+------------+------------+------------+------------+

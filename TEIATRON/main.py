@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (QMenuBar, QDialog, QListWidget, QInputDialog, QHBox
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from ml_engine import MinDistanceClassifier, MaxDistanceClassifier
+from controller import MLController
 
 from config import setup_pyqtgraph, BG_MAIN, ACCENT_COLOR
 
@@ -179,14 +180,28 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(dash_widget)
 
         # --- 3. PÁGINAS EXPANDIDAS ---
-        self.page_input = InputExpandedPage(self.card_input.update_preview_text, lambda: self.stack.setCurrentIndex(0))
+        self.page_input = InputExpandedPage(
+            self.card_input.update_preview_text, 
+            lambda: self.stack.setCurrentIndex(0),
+            on_import_callback=lambda f: self.controller.handle_load_csv(f),
+            on_split_callback=lambda s, tr: self.controller.handle_split_data(s, tr)
+        )
         self.page_charts = ChartsExpandedPage(self.card_charts.preview_plot, lambda: self.stack.setCurrentIndex(0))
         
         # INJETAMOS O self.train_model AQUI NO FINAL:
-        self.page_algo = AlgorithmExpandedPage(self.card_algo.update_preview_text, lambda: self.stack.setCurrentIndex(0), self.train_model)
+        self.page_algo = AlgorithmExpandedPage(
+            self.card_algo.update_preview_text, 
+            lambda: self.stack.setCurrentIndex(0), 
+            self.train_model,
+            get_metadata_callback=lambda algo: self.controller.get_algorithm_metadata(algo)
+        )
         
         # Onde estava: self.page_accuracy = AccuracyExpandedPage(...)
         self.page_accuracy = AccuracyExpandedPage(lambda: self.stack.setCurrentIndex(0), self.evaluate_current_model)
+        self.controller = MLController(self.page_algo.append_log)
+        
+        # Agora que o controller e a page_algo estão criados, nós forçamos o primeiro build do form dinâmico
+        self.page_algo.build_dynamic_form()
         
         # --- 4. ADICIONANDO PÁGINAS AO STACK ---
         self.stack.addWidget(self.page_input)    # Index 1
@@ -196,209 +211,19 @@ class MainWindow(QMainWindow):
     
     def train_model(self):
         self.page_algo.clear_logs()
-        self.page_algo.append_log("[SISTEMA] Iniciando preparação dos dados...")
         
         try:
-            dataset, class_data, conjunto_data = self.page_input.get_full_dataset()
+            dataset, class_data, conjunto_data = self.controller.data_manager.get_full_dataset()
             params = self.page_algo.get_current_params()
             
             if not dataset or not class_data:
                 raise Exception("Dataset não carregado.")
                 
-            self.page_algo.append_log(f"Algoritmo selecionado: {params['Algoritmo']}")
+            self.current_model, data_dict = self.controller.train_model(dataset, class_data, conjunto_data, params)
             
-            # --- 1. FILTRAGEM DOS DADOS ---
-            keys = ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"]
-            c1 = params.get("Classe 1", "").replace("Iris-","")
-            c2 = params.get("Classe 2", "").replace("Iris-","")
-            alvo = params.get("Classe Alvo", "").replace("Iris-","")
-            
-            is_perceptron = (params['Algoritmo'] == "Perceptron")
-            is_ova = is_perceptron and params.get("Estratégia") == "Um contra todos"
-            
-            if is_perceptron:
-                is_multiclass = True if is_ova else False
-            else:
-                is_multiclass = params.get("Multiclasse", True)
-
-            filtered_dataset = {k: [] for k in keys}
-            filtered_class_data = []
-            filtered_conjunto_data = []
-            X_train = []
-            y_train = []
-            
-            for i in range(len(class_data)):
-                classe_atual = class_data[i]
-                classe_exibicao = classe_atual
-                
-                # SEGREGAÇÃO VISUAL: Agrupa as classes para "Um contra todos"
-                if is_ova:
-                    classe_exibicao = alvo if classe_atual == alvo else "Resto"
-                # PULA as que não forem C1 e C2 se for binário normal
-                elif not is_multiclass:
-                    if classe_atual not in [c1, c2]:
-                        continue
-                    
-                for k in keys:
-                    filtered_dataset[k].append(dataset[k][i])
-                    
-                # Adiciona com o nome "Sanitizado" (Alvo vs Resto)
-                filtered_class_data.append(classe_exibicao)
-                filtered_conjunto_data.append(conjunto_data[i])
-
-                if conjunto_data[i] == "Treino":
-                    ponto = [dataset[k][i] for k in keys]
-                    X_train.append(ponto)
-                    y_train.append(classe_exibicao) 
-
-            if len(X_train) == 0:
-                raise Exception("Nenhum dado de treino encontrado.")
-
-            # --- 2. TREINAMENTO (MOTOR ML) ---
-            from ml_engine import MinDistanceClassifier, MaxDistanceClassifier, PerceptronClassifier
-            
-            if params['Algoritmo'] == "Distância Mínima":
-                self.current_model = MinDistanceClassifier()
-                centroides = self.current_model.train(X_train, y_train)
-                self.page_algo.append_log("\n[TREINAMENTO CONCLUÍDO]")
-                for c, vals in centroides.items():
-                    self.page_algo.append_log(f"Centróide '{c}': [{', '.join([f'{v:.2f}' for v in vals])}]")
-
-            elif params['Algoritmo'] == "Distância Máxima":
-                self.current_model = MaxDistanceClassifier()
-                classes_ops = self.current_model.train(X_train, y_train)
-                self.page_algo.append_log("\n[TREINAMENTO CONCLUÍDO]")
-                self.page_algo.append_log(f"Classes armazenadas: {', '.join(classes_ops)}")
-
-            elif params['Algoritmo'] == "Perceptron":
-                self.current_model = PerceptronClassifier()
-                bias = params.get("Bias Inicial", 0.0)
-                pesos_str = params.get("Pesos Iniciais", "0,0,0,0")
-                try:
-                    pesos_list = [bias] + [float(w.strip()) for w in pesos_str.split(",")]
-                except ValueError:
-                    raise Exception("Formato inválido de Pesos. Use números separados por vírgula.")
-                    
-                if len(pesos_list) != 5:
-                    raise Exception("Você precisa informar exatamente 4 pesos (W1 a W4).")
-
-                regra_delta = params.get("Regra Delta", False)
-                epocas = params.get("Épocas", 100)
-                lr = params.get("Learning Rate", 0.01)
-                
-                # RODA O TREINO
-                self.current_model.train(X_train, y_train, alvo if is_ova else c1, epocas, lr, pesos_list, regra_delta)
-                
-                erros = self.current_model.historico_erros
-                total_epocas = len(erros)
-                self.page_algo.append_log("\n[HISTÓRICO DE ERROS DE CLASSIFICAÇÃO]")
-                
-                for ep in range(total_epocas):
-                    if total_epocas <= 50 or ep < 5 or ep >= total_epocas - 5 or ep % (total_epocas // 10) == 0:
-                        self.page_algo.append_log(f"  ↳ Época {ep + 1:03d}: {erros[ep]} erros")
-                    elif ep == 5 and total_epocas > 50:
-                        self.page_algo.append_log("  ↳ ... [ocultado para otimização] ...")
-                
-                self.page_algo.append_log("\n[TREINAMENTO CONCLUÍDO]")
-                p_finais = ", ".join([f"{p:.4f}" for p in self.current_model.pesos])
-                self.page_algo.append_log(f"Pesos Finais [Bias, W1..W4]: [{p_finais}]")
-                if erros and erros[-1] == 0:
-                    self.page_algo.append_log("★ Convergiu perfeitamente! ★")
-            
-            elif params['Algoritmo'] == "Problema do XOR":
-                self.page_algo.append_log("\n[INICIANDO O FAMOSO PROBLEMA DO XOR]")
-                self.page_algo.append_log("Aviso Teórico: O XOR não é linearmente separável.")
-                
-                # 1. Dataset Fixo do XOR (Preenchido com 0 nas variáveis extras para não quebrar o gráfico)
-                X_train = [
-                    [0.0, 0.0, 0.0, 0.0], # 0 XOR 0 = 0
-                    [0.0, 1.0, 0.0, 0.0], # 0 XOR 1 = 1
-                    [1.0, 0.0, 0.0, 0.0], # 1 XOR 0 = 1
-                    [1.0, 1.0, 0.0, 0.0]  # 1 XOR 1 = 0
-                ]
-                # Saída desejada (d)
-                y_train = ["Classe 0", "Classe 1", "Classe 1", "Classe 0"]
-                
-                # Prepara os dados visuais simulando o formato do dataset
-                filtered_dataset = {
-                    "Sepal Length": [0.0, 0.0, 1.0, 1.0],
-                    "Sepal Width":  [0.0, 1.0, 0.0, 1.0],
-                    "Petal Length": [0.0, 0.0, 0.0, 0.0],
-                    "Petal Width":  [0.0, 0.0, 0.0, 0.0]
-                }
-                filtered_class_data = y_train
-                filtered_conjunto_data = ["Treino", "Treino", "Treino", "Treino"]
-
-                self.current_model = PerceptronClassifier()
-                
-                # Pegando parâmetros do usuário (Sempre usando Regra Delta para este teste)
-                epocas = params.get("Épocas", 100)
-                lr = params.get("Learning Rate", 0.1)
-                bias = params.get("Bias Inicial", 0.0)
-                
-                # Permite que o usuário defina os pesos, mas garante que tenha 5 elementos
-                pesos_str = params.get("Pesos Iniciais", "0,0,0,0")
-                try:
-                    pesos_list = [bias] + [float(w.strip()) for w in pesos_str.split(",")]
-                except ValueError:
-                    pesos_list = [0.0, 0.0, 0.0, 0.0, 0.0]
-                
-                if len(pesos_list) < 5:
-                    pesos_list += [0.0] * (5 - len(pesos_list))
-                
-                # 2. Treina o modelo forçando a Classe 1 como Alvo e ativando a Regra Delta
-                self.current_model.train(X_train, y_train, "Classe 1", epocas, lr, pesos_list, regra_delta=True)
-                
-                # 3. Log de Erros
-                erros = self.current_model.historico_erros
-                total_epocas = len(erros)
-                self.page_algo.append_log("\n[HISTÓRICO DE ERROS DA REGRA DELTA]")
-                
-                for ep in range(total_epocas):
-                    if total_epocas <= 50 or ep < 5 or ep >= total_epocas - 5 or ep % (total_epocas // 10) == 0:
-                        self.page_algo.append_log(f"  ↳ Época {ep + 1:03d}: {erros[ep]} erros")
-                
-                self.page_algo.append_log("\n[TREINAMENTO CONCLUÍDO]")
-                p_finais = ", ".join([f"{p:.4f}" for p in self.current_model.pesos])
-                self.page_algo.append_log(f"Pesos Finais: [{p_finais}]")
-                
-                # O toque educativo no log
-                if erros[-1] > 0:
-                    self.page_algo.append_log("★ Conclusão: Como esperado, o modelo não zerou os erros! O hiperplano linear não consegue separar o XOR. ★")
-
-            # --- Adicione isto no bloco de TREINAMENTO (MOTOR ML) ---
-            elif params['Algoritmo'] in ["Bayes Ótimo", "Naive Bayes"]:
-                import numpy as np
-                from ml_engine import OptimalBayesMAP, NaiveBayesMAP
-                
-                X_train_np = np.array(X_train)
-                y_train_np = np.array(y_train)
-                
-                if params['Algoritmo'] == "Bayes Ótimo":
-                    self.current_model = OptimalBayesMAP()
-                    self.current_model.fit(X_train_np, y_train_np)
-                    self.page_algo.append_log("\n[TREINAMENTO BAYES ÓTIMO CONCLUÍDO]")
-                    self.page_algo.append_log("Distribuições Gausianas Multivariadas calculadas.")
-                    
-                    # Cálculo e Log da Superfície de Decisão Quadrática
-                    classes_treinadas = self.current_model.classes
-                    if len(classes_treinadas) >= 2:
-                        self.page_algo.append_log("\n[SUPERFÍCIES DE DECISÃO (W, w, w0)]")
-                        for i in range(len(classes_treinadas)):
-                            for j in range(i + 1, len(classes_treinadas)):
-                                c1, c2 = classes_treinadas[i], classes_treinadas[j]
-                                W, w, w0 = self.current_model.get_decision_surface(c1, c2)
-                                
-                                self.page_algo.append_log(f"► Fronteira: {c1} x {c2}")
-                                self.page_algo.append_log(f"  Matriz W:\n{np.array_str(W, precision=3, suppress_small=True)}")
-                                self.page_algo.append_log(f"  Vetor w: {np.round(w, 3)}")
-                                self.page_algo.append_log(f"  Const w0: {w0:.3f}\n")
-                                
-                elif params['Algoritmo'] == "Naive Bayes":
-                    self.current_model = NaiveBayesMAP()
-                    self.current_model.fit(X_train_np, y_train_np)
-                    self.page_algo.append_log("\n[TREINAMENTO NAIVE BAYES CONCLUÍDO]")
-                    self.page_algo.append_log("Médias e Variâncias calculadas (assumindo independência).")
+            filtered_dataset = data_dict['filtered_dataset']
+            filtered_class_data = data_dict['filtered_class_data']
+            filtered_conjunto_data = data_dict['filtered_conjunto_data']
             
             # --- 3. ATUALIZAR GRÁFICOS ---
             self.page_algo.append_log("\n[SISTEMA] Atualizando gráficos...")
