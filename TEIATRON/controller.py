@@ -3,7 +3,7 @@ from data_manager import DataManager
 from ml_engine import (
     MinDistanceClassifier, MaxDistanceClassifier, 
     PerceptronClassifier, OptimalBayesMAP, NaiveBayesMAP,
-    NeuralNetworkClassifier
+    NeuralNetworkClassifier, SVMClassifier
 )
 import numpy as np
 
@@ -14,7 +14,8 @@ MODEL_MAP = {
     "Problema do XOR": PerceptronClassifier,
     "Bayes Ótimo": OptimalBayesMAP,
     "Naive Bayes": NaiveBayesMAP,
-    "Rede Neural (MLP)": NeuralNetworkClassifier
+    "Rede Neural (MLP)": NeuralNetworkClassifier,
+    "Máquina de Vetores de Suporte (SVM)": SVMClassifier
 }
 
 class MLController:
@@ -214,6 +215,19 @@ class MLController:
             if erros:
                 self.log_callback(f"Erro inicial: {erros[0]:.6f}")
                 self.log_callback(f"Erro final:   {erros[-1]:.6f}")
+                
+        elif algo_name == "Máquina de Vetores de Suporte (SVM)":
+            self.current_model = SVMClassifier()
+            kernel = params.get("Kernel", "linear")
+            C_val = params.get("C (Regularização)", 1.0)
+            degree = params.get("Grau (Poly)", 3)
+            
+            self.current_model.train(X_train, y_train, Kernel=kernel, **{"C (Regularização)": C_val, "Grau (Poly)": degree})
+            self.log_callback("\n[TREINAMENTO SVM CONCLUÍDO]")
+            self.log_callback(f"Kernel selecionado: {kernel}")
+            if kernel == "poly":
+                self.log_callback(f"Grau polinomial: {degree}")
+            self.log_callback(f"Vetores de suporte encontrados: {len(self.current_model.model.support_)}")
 
         if hasattr(self, 'current_model') and self.current_model is not None:
             self.current_model.selected_features = params.get("selected_features", ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"])

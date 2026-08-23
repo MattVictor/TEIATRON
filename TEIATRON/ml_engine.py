@@ -456,9 +456,11 @@ class OptimalBayesMAP(BaseClassifier):
         
         hid_vals = [np.mean(dataset.get(selected_features[i], [])) for i in hid_idx]
         
-        res = 150
-        x_min, x_max = min(x_data) - 1, max(x_data) + 1
-        y_min, y_max = min(y_data) - 1, max(y_data) + 1
+        res = 200
+        rx = max(x_data) - min(x_data)
+        ry = max(y_data) - min(y_data)
+        x_min, x_max = min(x_data) - rx, max(x_data) + rx
+        y_min, y_max = min(y_data) - ry, max(y_data) + ry
         
         xi = np.linspace(x_min, x_max, res)
         yi = np.linspace(y_min, y_max, res)
@@ -561,9 +563,11 @@ class NaiveBayesMAP(BaseClassifier):
         
         hid_vals = [np.mean(dataset.get(selected_features[i], [])) for i in hid_idx]
         
-        res = 150
-        x_min, x_max = min(x_data) - 1, max(x_data) + 1
-        y_min, y_max = min(y_data) - 1, max(y_data) + 1
+        res = 200
+        rx = max(x_data) - min(x_data)
+        ry = max(y_data) - min(y_data)
+        x_min, x_max = min(x_data) - rx, max(x_data) + rx
+        y_min, y_max = min(y_data) - ry, max(y_data) + ry
         
         xi = np.linspace(x_min, x_max, res)
         yi = np.linspace(y_min, y_max, res)
@@ -712,3 +716,124 @@ class NeuralNetworkClassifier(BaseClassifier):
         nome_classe = self.reverse_map.get(classe_predita, "Desconhecido")
         
         return nome_classe, {"Ativação O1": out_o[0], "Ativação O2": out_o[1]}
+
+# =====================================================================
+# CLASSIFICADOR SVM (MÁQUINA DE VETORES DE SUPORTE)
+# =====================================================================
+try:
+    from sklearn.svm import SVC
+except ImportError:
+    SVC = None
+
+class SVMClassifier(BaseClassifier):
+    @classmethod
+    def get_hyperparameters(cls):
+        return [
+            {"name": "Estratégia", "type": "options", "choices": ["Clássico", "Um contra todos"], "default": "Clássico"},
+            {"name": "Classe 1", "type": "class_selector", "default": "Iris-setosa", "depends_on": {"field": "Estratégia", "value": "Clássico"}},
+            {"name": "Classe 2", "type": "class_selector", "default": "Iris-versicolor", "depends_on": {"field": "Estratégia", "value": "Clássico"}, "prevent_same_as": "Classe 1"},
+            {"name": "Classe Alvo", "type": "class_selector", "default": "Iris-setosa", "depends_on": {"field": "Estratégia", "value": "Um contra todos"}},
+            {"name": "Kernel", "type": "options", "choices": ["linear", "poly", "rbf", "sigmoid"], "default": "linear"},
+            {"name": "C (Regularização)", "type": "float", "default": 1.0},
+            {"name": "Grau (Poly)", "type": "int", "default": 3, "depends_on": {"field": "Kernel", "value": "poly"}}
+        ]
+        
+    def __init__(self):
+        self.model = None
+        self.reverse_map = {}
+        
+    def train(self, X, y, **kwargs):
+        if SVC is None:
+            raise Exception("A biblioteca scikit-learn não está instalada. Abra o terminal e digite: pip install scikit-learn")
+            
+        kernel = kwargs.get('Kernel', 'linear')
+        C = kwargs.get('C (Regularização)', 1.0)
+        degree = kwargs.get('Grau (Poly)', 3)
+        
+        # Mapeamento para 0 e 1, necessário se as classes vierem como strings
+        classes = sorted(list(set(y)))
+        self.reverse_map = {0: classes[0], 1: classes[1] if len(classes) > 1 else "Resto"}
+        y_mapped = [0 if val == classes[0] else 1 for val in y]
+        
+        self.model = SVC(kernel=kernel, C=C, degree=degree)
+        self.model.fit(X, y_mapped)
+        
+    def predict(self, X):
+        if self.model is None:
+            raise Exception("Modelo ainda não treinado.")
+            
+        X = np.array(X)
+        if X.ndim == 1:
+            X = X.reshape(1, -1)
+            
+        preds = self.model.predict(X)
+        
+        if len(preds) == 1:
+            dist = self.model.decision_function(X)[0]
+            classe_predita = self.reverse_map.get(preds[0], "Desconhecido")
+            return classe_predita, {"Distância à Margem": dist}
+            
+        return [self.reverse_map.get(p, "Desconhecido") for p in preds]
+        
+    def get_plot_data(self, **kwargs):
+        if self.model is None: return {}
+        
+        x_key = kwargs.get('x_key')
+        y_key = kwargs.get('y_key')
+        dataset = kwargs.get('dataset')
+        x_data = kwargs.get('x_data')
+        y_data = kwargs.get('y_data')
+        
+        selected_features = getattr(self, 'selected_features', ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"])
+        if not x_key or not y_key or not dataset: return {}
+        
+        if x_key not in selected_features or y_key not in selected_features:
+            return {"empty_legends": ["O modelo não utilizou ambos os eixos selecionados."]}
+            
+        idx_x = selected_features.index(x_key)
+        idx_y = selected_features.index(y_key)
+        hid_idx = [i for i in range(len(selected_features)) if i not in [idx_x, idx_y]]
+        
+        hid_vals = [np.mean(dataset.get(selected_features[i], [])) for i in hid_idx]
+        
+        res = 200
+        rx = max(x_data) - min(x_data)
+        ry = max(y_data) - min(y_data)
+        x_min, x_max = min(x_data) - rx, max(x_data) + rx
+        y_min, y_max = min(y_data) - ry, max(y_data) + ry
+        
+        xi = np.linspace(x_min, x_max, res)
+        yi = np.linspace(y_min, y_max, res)
+        
+        grid_points = []
+        for xv in xi:
+            for yv in yi:
+                vec = np.zeros(len(selected_features))
+                vec[idx_x] = xv
+                vec[idx_y] = yv
+                for k, h_i in enumerate(hid_idx):
+                    vec[h_i] = hid_vals[k]
+                grid_points.append(vec)
+                
+        # Batch prediction for speed
+        Z_flat = self.model.decision_function(grid_points)
+        Z = Z_flat.reshape((res, res))
+        
+        # Obter os Vetores de Suporte para destacar no gráfico
+        points = []
+        if hasattr(self.model, 'support_vectors_'):
+            for idx, sv in enumerate(self.model.support_vectors_):
+                points.append({
+                    "x": sv[idx_x],
+                    "y": sv[idx_y],
+                    "name": "Vetor de Suporte" if idx == 0 else None,
+                    "symbol": "o",
+                    "size": 16,
+                    "color": "#FFFF00"  # Amarelo
+                })
+        
+        # O nível 0 representa a fronteira real de decisão
+        return {
+            "contours": [{"Z": Z, "level": 0.0, "x_min": x_min, "x_max": x_max, "y_min": y_min, "y_max": y_max, "res": res, "name": "Fronteira SVM"}],
+            "points": points
+        }

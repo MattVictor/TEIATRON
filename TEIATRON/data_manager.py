@@ -100,10 +100,10 @@ class DataManager:
         c2 = params.get("Classe 2", "").replace("Iris-", "")
         alvo = params.get("Classe Alvo", "").replace("Iris-", "")
 
-        is_perceptron = (params.get('Algoritmo') == "Perceptron")
-        is_ova = is_perceptron and params.get("Estratégia") == "Um contra todos"
+        is_perceptron_or_svm = params.get('Algoritmo') in ["Perceptron", "Máquina de Vetores de Suporte (SVM)"]
+        is_ova = is_perceptron_or_svm and params.get("Estratégia") == "Um contra todos"
 
-        if is_perceptron:
+        if is_perceptron_or_svm:
             is_multiclass = True if is_ova else False
         else:
             is_multiclass = params.get("Multiclasse", True)

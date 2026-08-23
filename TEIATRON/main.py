@@ -2,7 +2,7 @@ import sys
 import numpy as np
 import os
 import pickle
-from PyQt6.QtWidgets import (QMenuBar, QDialog, QListWidget, QInputDialog, QHBoxLayout, QComboBox, QPushButton, QCheckBox,
+from PyQt6.QtWidgets import (QMenuBar, QDialog, QListWidget, QInputDialog, QHBoxLayout, QComboBox, QPushButton,
     QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QSplitter, QStackedWidget, QLabel, QMessageBox
 )
@@ -242,20 +242,15 @@ class MainWindow(QMainWindow):
                 x_epocas = list(range(1, len(y_erros) + 1))
                 self.page_charts.add_chart("Evolução do Erro", "Linha", x_epocas, y_erros)
             
-            # === CORREÇÃO: Limpa todas as checkboxes ANTES de forçar as iniciais ===
+            # === CORREÇÃO: Limpa todas as checkboxes ANTES de forçar as 2 iniciais ===
             for chk in self.page_charts.checkboxes:
                 chk.blockSignals(True) # Evita disparar eventos no meio da limpeza
                 chk.setChecked(False)
                 chk.blockSignals(False)
             
-            # Marca dinamicamente até 2 características baseadas na escolha do usuário
-            checked_count = 0
-            for chk in self.page_charts.checkboxes:
-                if chk.text() in params["selected_features"]:
-                    chk.setChecked(True)
-                    checked_count += 1
-                    if checked_count >= 2:
-                        break
+            # Agora marca apenas as duas primeiras com segurança
+            self.page_charts.checkboxes[0].setChecked(True) 
+            self.page_charts.checkboxes[1].setChecked(True) 
             
             # ... (seu código de gerar o gráfico continua intacto aqui) ...
             self.page_charts.plot_custom_chart()
@@ -276,20 +271,24 @@ class MainWindow(QMainWindow):
             self.evaluate_current_model(modo_atual)
             
             # Pega o texto da miniatura do card para mostrar no pop-up
-            preview_text = self.card_accuracy.preview_label.text().split("\n")
-            resumo_acc = preview_text[1] if len(preview_text) > 1 else preview_text[0]
+            resumo_acc = self.card_accuracy.preview_label.text().split("\n")[1]
 
             msg = QMessageBox(self)
             msg.setWindowTitle("Treinamento Concluído")
             msg.setText(f"Modelo treinado com sucesso!\n\n{resumo_acc}")
             
         except Exception as e:
+            # ... resto do seu código (except) ...
+            
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Treinamento Concluído")
+            msg.setText("Modelo treinado com sucesso!")
+            
+        except Exception as e:
             self.page_algo.append_log(f"[ERRO CRÍTICO] {e}")
-            import traceback
-            traceback.print_exc()
             msg = QMessageBox(self)
             msg.setWindowTitle("Treinamento Interrompido")
-            msg.setText(f"Ocorreu um erro:\n{e}")
+            msg.setText(f"{e}")
             
         msg.setStyleSheet("""
                 QMessageBox { background-color: #1E1E1E; color: #FFFFFF; }
