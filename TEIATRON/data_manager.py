@@ -133,7 +133,8 @@ class DataManager:
             filtered_conjunto_data.append(conjunto_data[i])
 
             if conjunto_data[i] == "Treino":
-                ponto = [dataset[k][i] for k in self.keys]
+                selected_features = params.get("selected_features", self.keys)
+                ponto = [dataset[k][i] for k in selected_features]
                 X_train.append(ponto)
                 y_train.append(classe_exibicao)
 

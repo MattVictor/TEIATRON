@@ -2,7 +2,7 @@ import sys
 import numpy as np
 import os
 import pickle
-from PyQt6.QtWidgets import (QMenuBar, QDialog, QListWidget, QInputDialog, QHBoxLayout, QComboBox, QPushButton,
+from PyQt6.QtWidgets import (QMenuBar, QDialog, QListWidget, QInputDialog, QHBoxLayout, QComboBox, QPushButton, QCheckBox,
     QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QSplitter, QStackedWidget, QLabel, QMessageBox
 )
@@ -215,6 +215,10 @@ class MainWindow(QMainWindow):
         try:
             dataset, class_data, conjunto_data = self.controller.data_manager.get_full_dataset()
             params = self.page_algo.get_current_params()
+            params["selected_features"] = self.page_input.get_selected_features()
+            
+            if not params["selected_features"]:
+                raise Exception("Selecione pelo menos uma característica na aba de Entrada para treinar!")
             
             if not dataset or not class_data:
                 raise Exception("Dataset não carregado.")
@@ -238,15 +242,20 @@ class MainWindow(QMainWindow):
                 x_epocas = list(range(1, len(y_erros) + 1))
                 self.page_charts.add_chart("Evolução do Erro", "Linha", x_epocas, y_erros)
             
-            # === CORREÇÃO: Limpa todas as checkboxes ANTES de forçar as 2 iniciais ===
+            # === CORREÇÃO: Limpa todas as checkboxes ANTES de forçar as iniciais ===
             for chk in self.page_charts.checkboxes:
                 chk.blockSignals(True) # Evita disparar eventos no meio da limpeza
                 chk.setChecked(False)
                 chk.blockSignals(False)
             
-            # Agora marca apenas as duas primeiras com segurança
-            self.page_charts.checkboxes[0].setChecked(True) 
-            self.page_charts.checkboxes[1].setChecked(True) 
+            # Marca dinamicamente até 2 características baseadas na escolha do usuário
+            checked_count = 0
+            for chk in self.page_charts.checkboxes:
+                if chk.text() in params["selected_features"]:
+                    chk.setChecked(True)
+                    checked_count += 1
+                    if checked_count >= 2:
+                        break
             
             # ... (seu código de gerar o gráfico continua intacto aqui) ...
             self.page_charts.plot_custom_chart()
@@ -267,24 +276,20 @@ class MainWindow(QMainWindow):
             self.evaluate_current_model(modo_atual)
             
             # Pega o texto da miniatura do card para mostrar no pop-up
-            resumo_acc = self.card_accuracy.preview_label.text().split("\n")[1]
+            preview_text = self.card_accuracy.preview_label.text().split("\n")
+            resumo_acc = preview_text[1] if len(preview_text) > 1 else preview_text[0]
 
             msg = QMessageBox(self)
             msg.setWindowTitle("Treinamento Concluído")
             msg.setText(f"Modelo treinado com sucesso!\n\n{resumo_acc}")
             
         except Exception as e:
-            # ... resto do seu código (except) ...
-            
-            msg = QMessageBox(self)
-            msg.setWindowTitle("Treinamento Concluído")
-            msg.setText("Modelo treinado com sucesso!")
-            
-        except Exception as e:
             self.page_algo.append_log(f"[ERRO CRÍTICO] {e}")
+            import traceback
+            traceback.print_exc()
             msg = QMessageBox(self)
             msg.setWindowTitle("Treinamento Interrompido")
-            msg.setText(f"{e}")
+            msg.setText(f"Ocorreu um erro:\n{e}")
             
         msg.setStyleSheet("""
                 QMessageBox { background-color: #1E1E1E; color: #FFFFFF; }
@@ -300,12 +305,8 @@ class MainWindow(QMainWindow):
 
         current_inputs = self.page_input.get_current_inputs()
         
-        ponto = [
-            current_inputs["Sepal Length"],
-            current_inputs["Sepal Width"],
-            current_inputs["Petal Length"],
-            current_inputs["Petal Width"]
-        ]
+        selected_features = getattr(self.current_model, 'selected_features', ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"])
+        ponto = [current_inputs[k] for k in selected_features]
         
         # Chama a matemática pura
         resultado = self.current_model.predict(ponto)
@@ -395,7 +396,8 @@ class MainWindow(QMainWindow):
 
                 total += 1
                 real = filtered_class_data[i]
-                ponto = [filtered_dataset[k][i] for k in keys]
+                selected_features = getattr(modelo, 'selected_features', keys)
+                ponto = [filtered_dataset[k][i] for k in selected_features]
                 
                 res = modelo.predict(ponto)
                 pred = res[0] if isinstance(res, tuple) else res

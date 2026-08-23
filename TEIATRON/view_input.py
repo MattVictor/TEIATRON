@@ -1,10 +1,11 @@
 # view_input.py
+import os
 from PyQt6.QtWidgets import (
-    QLabel, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QDoubleSpinBox, 
+    QCheckBox, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QDoubleSpinBox, 
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, 
     QFileDialog, QGridLayout, QMessageBox, QSpinBox
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QSettings
 from PyQt6.QtGui import QColor
 from config import TEXT_PRIMARY, ACCENT_COLOR, ACCENT_TEXT, WARNING_COLOR
 from base_components import BaseCard, BaseExpandedPage
@@ -136,8 +137,31 @@ class InputExpandedPage(BaseExpandedPage):
 
         layout.addWidget(split_panel)
 
+        # --- SELEÇÃO DE FEATURES ---
+        feature_panel = QWidget()
+        feature_layout = QHBoxLayout(feature_panel)
+        feature_layout.setContentsMargins(0, 10, 0, 0)
+        
+        lbl_feat = QLabel("Usar Características:")
+        lbl_feat.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px; font-weight: bold;")
+        feature_layout.addWidget(lbl_feat)
+        
+        self.feature_checkboxes = {}
+        for name in labels:
+            chk = QCheckBox(name)
+            chk.setChecked(True)
+            chk.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px;")
+            self.feature_checkboxes[name] = chk
+            feature_layout.addWidget(chk)
+            
+        feature_layout.addStretch()
+        layout.addWidget(feature_panel)
+
         self.add_main_content(container)
         self.sync_to_card()
+
+    def get_selected_features(self):
+        return [name for name, chk in self.feature_checkboxes.items() if chk.isChecked()]
 
     def get_current_inputs(self):
         """Coleta os 4 valores que estão atualmente digitados nas caixas de input."""
@@ -157,10 +181,29 @@ class InputExpandedPage(BaseExpandedPage):
         self.sync_to_card()
 
     def load_csv(self):
+        settings = QSettings("TEIATRON", "MachineLearningApp")
+        last_path = settings.value("last_dataset_path")
+
+        if last_path and os.path.exists(last_path):
+            reply = QMessageBox.question(
+                self, 
+                "Reutilizar Dataset", 
+                f"Deseja utilizar o último dataset carregado?\n\n{last_path}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self._do_load_csv(last_path)
+                return
+
         file_path, _ = QFileDialog.getOpenFileName(self, "Importar CSV", "", "Arquivos CSV (*.csv)")
         if not file_path:
             return
             
+        settings.setValue("last_dataset_path", file_path)
+        self._do_load_csv(file_path)
+
+    def _do_load_csv(self, file_path):
         try:
             headers, data = self.on_import_callback(file_path)
             self.render_table(headers, data)

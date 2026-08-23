@@ -138,12 +138,15 @@ class AlgorithmExpandedPage(BaseExpandedPage):
         metadata = self.get_metadata_callback(algo) if self.get_metadata_callback else []
         
         self.dynamic_widgets = {}
+        self.widget_metadata = {}
         classes_iris = ["Iris-setosa", "Iris-versicolor", "Iris-virginica"]
         
         for param in metadata:
             name = param["name"]
             p_type = param["type"]
             default = param.get("default")
+            
+            self.widget_metadata[name] = param
             
             if p_type == "bool":
                 widget = QCheckBox(name)
@@ -199,24 +202,68 @@ class AlgorithmExpandedPage(BaseExpandedPage):
                 self.form_layout.addRow(f"{name}:", widget)
                 self.dynamic_widgets[name] = widget
 
+        self.evaluate_rules()
         self.sync_to_card()
 
+    def _get_widget_value(self, widget):
+        if isinstance(widget, QCheckBox): return widget.isChecked()
+        if isinstance(widget, QComboBox): return widget.currentText()
+        if isinstance(widget, (QSpinBox, QDoubleSpinBox)): return widget.value()
+        if isinstance(widget, QLineEdit): return widget.text()
+        return None
+
+    def evaluate_rules(self):
+        for name, widget in self.dynamic_widgets.items():
+            meta = self.widget_metadata[name]
+            
+            # 1. Evaluate Visibility
+            if "depends_on" in meta:
+                dep = meta["depends_on"]
+                dep_name = dep["field"]
+                dep_val = dep["value"]
+                
+                dep_widget = self.dynamic_widgets.get(dep_name)
+                if dep_widget:
+                    curr_val = self._get_widget_value(dep_widget)
+                    is_visible = (curr_val == dep_val)
+                    
+                    widget.setVisible(is_visible)
+                    label = self.form_layout.labelForField(widget)
+                    if label:
+                        label.setVisible(is_visible)
+                        
+            # 2. Evaluate Mutual Exclusion
+            if "prevent_same_as" in meta:
+                other_name = meta["prevent_same_as"]
+                other_widget = self.dynamic_widgets.get(other_name)
+                if other_widget and widget.isVisible():
+                    val_self = self._get_widget_value(widget)
+                    val_other = self._get_widget_value(other_widget)
+                    if val_self == val_other:
+                        widget.blockSignals(True)
+                        for i in range(widget.count()):
+                            if widget.itemText(i) != val_other:
+                                widget.setCurrentIndex(i)
+                                break
+                        widget.blockSignals(False)
+
     def sync_to_card(self):
+        self.evaluate_rules()
         algo = self.combo_algo.currentText()
         lines = [f"Modelo: {algo}"]
         
         count = 0
         for name, widget in self.dynamic_widgets.items():
+            if not widget.isVisible():
+                continue
+                
             if count >= 3: break # Limita o texto do Card para não estourar a tela
             
+            val = self._get_widget_value(widget)
             if isinstance(widget, QCheckBox):
-                val = "Sim" if widget.isChecked() else "Não"
+                val = "Sim" if val else "Não"
             elif isinstance(widget, (QSpinBox, QDoubleSpinBox)):
-                val = str(widget.value())
-            elif isinstance(widget, QComboBox):
-                val = widget.currentText()
-            elif isinstance(widget, QLineEdit):
-                val = widget.text()
+                val = str(val)
                 
             lines.append(f"{name}: {val}")
             count += 1

@@ -26,8 +26,8 @@ class MinDistanceClassifier(BaseClassifier):
     def get_hyperparameters(cls):
         return [
             {"name": "Multiclasse", "type": "bool", "default": True},
-            {"name": "Classe 1", "type": "class_selector", "default": "Iris-setosa"},
-            {"name": "Classe 2", "type": "class_selector", "default": "Iris-versicolor"}
+            {"name": "Classe 1", "type": "class_selector", "default": "Iris-setosa", "depends_on": {"field": "Multiclasse", "value": False}},
+            {"name": "Classe 2", "type": "class_selector", "default": "Iris-versicolor", "depends_on": {"field": "Multiclasse", "value": False}, "prevent_same_as": "Classe 1"}
         ]
 
     def __init__(self):
@@ -96,35 +96,40 @@ class MinDistanceClassifier(BaseClassifier):
     def get_plot_data(self, **kwargs):
         x_key = kwargs.get('x_key')
         y_key = kwargs.get('y_key')
-        keys = kwargs.get('keys')
-        if not x_key or not y_key or not keys: return {}
+        if not x_key or not y_key: return {}
         
-        idx_x = keys.index(x_key)
-        idx_y = keys.index(y_key)
+        selected_features = getattr(self, 'selected_features', ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"])
+        if x_key not in selected_features or y_key not in selected_features:
+            return {"empty_legends": ["O modelo não utilizou ambos os eixos selecionados."]}
+            
+        idx_x = selected_features.index(x_key)
+        idx_y = selected_features.index(y_key)
         
         points = []
         for c_name, coords in self.centroids.items():
-            cx, cy = coords[idx_x], coords[idx_y]
-            points.append({"x": cx, "y": cy, "name": f"Centróide {c_name}", "symbol": "x", "size": 15, "color": "w"})
+            if len(coords) > max(idx_x, idx_y):
+                cx, cy = coords[idx_x], coords[idx_y]
+                points.append({"x": cx, "y": cy, "name": f"Centróide {c_name}", "symbol": "x", "size": 15, "color": "w"})
             
         lines = []
         if len(self.classes_trained) == 2:
             c1_coords = self.centroids[self.classes_trained[0]]
             c2_coords = self.centroids[self.classes_trained[1]]
-            nx = c2_coords[idx_x] - c1_coords[idx_x]
-            ny = c2_coords[idx_y] - c1_coords[idx_y]
-            mx = (c1_coords[idx_x] + c2_coords[idx_x]) / 2.0
-            my = (c1_coords[idx_y] + c2_coords[idx_y]) / 2.0
-            
-            if ny != 0:
-                angulo_deg = math.degrees(math.atan2(-nx, ny))
-                a = -nx / ny
-                b = my - (a * mx)
-                equacao = f"g(x) = {a:.2f}x {'+' if b >= 0 else '-'} {abs(b):.2f}"
-            else:
-                angulo_deg = 90
-                equacao = f"g(x) -> x = {mx:.2f}"
-            lines.append({"angle": angulo_deg, "pos": (mx, my), "name": equacao})
+            if len(c1_coords) > max(idx_x, idx_y) and len(c2_coords) > max(idx_x, idx_y):
+                nx = c2_coords[idx_x] - c1_coords[idx_x]
+                ny = c2_coords[idx_y] - c1_coords[idx_y]
+                mx = (c1_coords[idx_x] + c2_coords[idx_x]) / 2.0
+                my = (c1_coords[idx_y] + c2_coords[idx_y]) / 2.0
+                
+                if ny != 0:
+                    angulo_deg = math.degrees(math.atan2(-nx, ny))
+                    a = -nx / ny
+                    b = my - (a * mx)
+                    equacao = f"g(x) = {a:.2f}x {'+' if b >= 0 else '-'} {abs(b):.2f}"
+                else:
+                    angulo_deg = 90
+                    equacao = f"g(x) -> x = {mx:.2f}"
+                lines.append({"angle": angulo_deg, "pos": (mx, my), "name": equacao})
             
         return {"points": points, "lines": lines}
     
@@ -133,8 +138,8 @@ class MaxDistanceClassifier(BaseClassifier):
     def get_hyperparameters(cls):
         return [
             {"name": "Multiclasse", "type": "bool", "default": True},
-            {"name": "Classe 1", "type": "class_selector", "default": "Iris-setosa"},
-            {"name": "Classe 2", "type": "class_selector", "default": "Iris-versicolor"}
+            {"name": "Classe 1", "type": "class_selector", "default": "Iris-setosa", "depends_on": {"field": "Multiclasse", "value": False}},
+            {"name": "Classe 2", "type": "class_selector", "default": "Iris-versicolor", "depends_on": {"field": "Multiclasse", "value": False}, "prevent_same_as": "Classe 1"}
         ]
 
     def __init__(self):
@@ -181,9 +186,9 @@ class PerceptronClassifier(BaseClassifier):
         return [
             {"name": "Regra Delta", "type": "bool", "default": False},
             {"name": "Estratégia", "type": "options", "choices": ["Clássico", "Um contra todos"], "default": "Clássico"},
-            {"name": "Classe 1", "type": "class_selector", "default": "Iris-setosa"},
-            {"name": "Classe 2", "type": "class_selector", "default": "Iris-versicolor"},
-            {"name": "Classe Alvo", "type": "class_selector", "default": "Iris-setosa"},
+            {"name": "Classe 1", "type": "class_selector", "default": "Iris-setosa", "depends_on": {"field": "Estratégia", "value": "Clássico"}},
+            {"name": "Classe 2", "type": "class_selector", "default": "Iris-versicolor", "depends_on": {"field": "Estratégia", "value": "Clássico"}, "prevent_same_as": "Classe 1"},
+            {"name": "Classe Alvo", "type": "class_selector", "default": "Iris-setosa", "depends_on": {"field": "Estratégia", "value": "Um contra todos"}},
             {"name": "Épocas", "type": "int", "min": 1, "max": 100000, "default": 100},
             {"name": "Learning Rate", "type": "float", "min": 0.0001, "max": 10.0, "default": 0.01},
             {"name": "Bias Inicial", "type": "float", "min": -100.0, "max": 100.0, "default": 0.0},
@@ -269,21 +274,23 @@ class PerceptronClassifier(BaseClassifier):
     def get_plot_data(self, **kwargs):
         x_key = kwargs.get('x_key')
         y_key = kwargs.get('y_key')
-        keys = kwargs.get('keys')
         dataset = kwargs.get('dataset')
-        if not x_key or not y_key or not keys or not dataset: return {}
+        if not x_key or not y_key or not dataset: return {}
         
-        idx_x = keys.index(x_key)
-        idx_y = keys.index(y_key)
+        selected_features = getattr(self, 'selected_features', ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"])
         
         b = self.pesos[0]
-        w_x = self.pesos[idx_x + 1]
-        w_y = self.pesos[idx_y + 1]
+        
+        if x_key not in selected_features or y_key not in selected_features:
+            return {"empty_legends": ["O modelo não utilizou ambos os eixos selecionados."]}
+            
+        w_x = self.pesos[selected_features.index(x_key) + 1]
+        w_y = self.pesos[selected_features.index(y_key) + 1]
         
         effective_bias = b
-        for i, k in enumerate(keys):
+        for i, k in enumerate(selected_features):
             if k != x_key and k != y_key:
-                dados_coluna = dataset[k]
+                dados_coluna = dataset.get(k, [])
                 if len(dados_coluna) > 0:
                     media_coluna = sum(dados_coluna) / len(dados_coluna)
                     effective_bias += self.pesos[i + 1] * media_coluna
@@ -432,22 +439,22 @@ class OptimalBayesMAP(BaseClassifier):
     def get_plot_data(self, **kwargs):
         x_key = kwargs.get('x_key')
         y_key = kwargs.get('y_key')
-        keys = kwargs.get('keys')
         dataset = kwargs.get('dataset')
         x_data = kwargs.get('x_data')
         y_data = kwargs.get('y_data')
         
-        if not x_key or not y_key or not keys or not dataset or len(self.classes) != 2: 
+        selected_features = getattr(self, 'selected_features', ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"])
+        if not x_key or not y_key or not dataset or len(self.classes) < 2: 
             return {}
             
-        c1, c2 = self.classes[0], self.classes[1]
-        W, w, w0 = self.get_decision_surface(c1, c2)
+        if x_key not in selected_features or y_key not in selected_features:
+            return {"empty_legends": ["O modelo não utilizou ambos os eixos selecionados."]}
+            
+        idx_x = selected_features.index(x_key)
+        idx_y = selected_features.index(y_key)
+        hid_idx = [i for i in range(len(selected_features)) if i not in [idx_x, idx_y]]
         
-        idx_x = keys.index(x_key)
-        idx_y = keys.index(y_key)
-        hid_idx = [i for i in range(4) if i not in [idx_x, idx_y]]
-        
-        hid_vals = [np.mean(dataset[keys[i]]) for i in hid_idx]
+        hid_vals = [np.mean(dataset.get(selected_features[i], [])) for i in hid_idx]
         
         res = 150
         x_min, x_max = min(x_data) - 1, max(x_data) + 1
@@ -455,19 +462,32 @@ class OptimalBayesMAP(BaseClassifier):
         
         xi = np.linspace(x_min, x_max, res)
         yi = np.linspace(y_min, y_max, res)
-        Z = np.zeros((res, res))
         
-        for i, xv in enumerate(xi):
-            for j, yv in enumerate(yi):
-                vec = np.zeros(4)
-                vec[idx_x] = xv
-                vec[idx_y] = yv
-                vec[hid_idx[0]] = hid_vals[0]
-                vec[hid_idx[1]] = hid_vals[1]
-                val = np.dot(vec.T, np.dot(W, vec)) + np.dot(w.T, vec) + w0
-                Z[i, j] = val
+        contours = []
+        
+        for i in range(len(self.classes)):
+            for j in range(i + 1, len(self.classes)):
+                c1, c2 = self.classes[i], self.classes[j]
+                W, w, w0 = self.get_decision_surface(c1, c2)
                 
-        return {"contours": [{"Z": Z, "level": 0.0, "x_min": x_min, "x_max": x_max, "y_min": y_min, "y_max": y_max, "res": res}]}
+                Z = np.zeros((res, res))
+                for idx_i, xv in enumerate(xi):
+                    for idx_j, yv in enumerate(yi):
+                        vec = np.zeros(len(selected_features))
+                        vec[idx_x] = xv
+                        vec[idx_y] = yv
+                        for k, h_i in enumerate(hid_idx):
+                            vec[h_i] = hid_vals[k]
+                        val = np.dot(vec.T, np.dot(W, vec)) + np.dot(w.T, vec) + w0
+                        Z[idx_i, idx_j] = val
+                        
+                contours.append({
+                    "Z": Z, "level": 0.0, "x_min": x_min, "x_max": x_max, 
+                    "y_min": y_min, "y_max": y_max, "res": res, 
+                    "name": f"Fronteira {c1}x{c2}"
+                })
+                
+        return {"contours": contours}
 
 # =====================================================================
 # CLASSIFICADOR NAIVE BAYES - MAP
@@ -502,6 +522,77 @@ class NaiveBayesMAP(BaseClassifier):
                 posteriors.append(posterior)
             preds.append(self.classes[np.argmax(posteriors)])
         return preds[0] if len(preds) == 1 else np.array(preds)
+
+    def get_decision_surface(self, classe_i, classe_j):
+        m_i = self.parameters[classe_i]['mean']
+        var_i = self.parameters[classe_i]['var']
+        inv_cov_i = np.diag(1.0 / var_i)
+        
+        m_j = self.parameters[classe_j]['mean']
+        var_j = self.parameters[classe_j]['var']
+        inv_cov_j = np.diag(1.0 / var_j)
+        
+        W = -0.5 * (inv_cov_i - inv_cov_j)
+        w = np.dot(inv_cov_i, m_i) - np.dot(inv_cov_j, m_j)
+        
+        term_w0_1 = -0.5 * (np.dot(np.dot(m_i.T, inv_cov_i), m_i) - np.dot(np.dot(m_j.T, inv_cov_j), m_j))
+        term_w0_2 = -0.5 * np.sum(np.log(var_i)) + 0.5 * np.sum(np.log(var_j))
+        w0 = term_w0_1 + term_w0_2
+        
+        return W, w, w0
+
+    def get_plot_data(self, **kwargs):
+        x_key = kwargs.get('x_key')
+        y_key = kwargs.get('y_key')
+        dataset = kwargs.get('dataset')
+        x_data = kwargs.get('x_data')
+        y_data = kwargs.get('y_data')
+        
+        selected_features = getattr(self, 'selected_features', ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"])
+        if not x_key or not y_key or not dataset or len(self.classes) < 2: 
+            return {}
+            
+        if x_key not in selected_features or y_key not in selected_features:
+            return {"empty_legends": ["O modelo não utilizou ambos os eixos selecionados."]}
+            
+        idx_x = selected_features.index(x_key)
+        idx_y = selected_features.index(y_key)
+        hid_idx = [i for i in range(len(selected_features)) if i not in [idx_x, idx_y]]
+        
+        hid_vals = [np.mean(dataset.get(selected_features[i], [])) for i in hid_idx]
+        
+        res = 150
+        x_min, x_max = min(x_data) - 1, max(x_data) + 1
+        y_min, y_max = min(y_data) - 1, max(y_data) + 1
+        
+        xi = np.linspace(x_min, x_max, res)
+        yi = np.linspace(y_min, y_max, res)
+        
+        contours = []
+        
+        for i in range(len(self.classes)):
+            for j in range(i + 1, len(self.classes)):
+                c1, c2 = self.classes[i], self.classes[j]
+                W, w, w0 = self.get_decision_surface(c1, c2)
+                
+                Z = np.zeros((res, res))
+                for idx_i, xv in enumerate(xi):
+                    for idx_j, yv in enumerate(yi):
+                        vec = np.zeros(len(selected_features))
+                        vec[idx_x] = xv
+                        vec[idx_y] = yv
+                        for k, h_i in enumerate(hid_idx):
+                            vec[h_i] = hid_vals[k]
+                        val = np.dot(vec.T, np.dot(W, vec)) + np.dot(w.T, vec) + w0
+                        Z[idx_i, idx_j] = val
+                        
+                contours.append({
+                    "Z": Z, "level": 0.0, "x_min": x_min, "x_max": x_max, 
+                    "y_min": y_min, "y_max": y_max, "res": res, 
+                    "name": f"Fronteira {c1}x{c2}"
+                })
+                
+        return {"contours": contours}
 
 # =====================================================================
 # CLASSIFICADOR REDE NEURAL (MLP 1 CAMADA OCULTA)

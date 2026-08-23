@@ -69,8 +69,11 @@ class MLController:
             except ValueError:
                 raise Exception("Formato inválido de Pesos. Use números separados por vírgula.")
                 
-            if len(pesos_list) != 5:
-                raise Exception("Você precisa informar exatamente 4 pesos (W1 a W4).")
+            num_features = len(params.get("selected_features", [1,2,3,4]))
+            if len(pesos_list) - 1 > num_features:
+                pesos_list = pesos_list[:num_features+1]
+            elif len(pesos_list) - 1 < num_features:
+                pesos_list += [0.0] * (num_features - (len(pesos_list) - 1))
 
             regra_delta = params.get("Regra Delta", False)
             epocas = params.get("Épocas", 100)
@@ -163,6 +166,7 @@ class MLController:
             }
             data['filtered_class_data'] = y_train_xor
             data['filtered_conjunto_data'] = ["Treino"] * 4
+            params["selected_features"] = ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"]
 
         elif algo_name in ["Bayes Ótimo", "Naive Bayes"]:
             X_train_np = np.array(X_train)
@@ -210,5 +214,8 @@ class MLController:
             if erros:
                 self.log_callback(f"Erro inicial: {erros[0]:.6f}")
                 self.log_callback(f"Erro final:   {erros[-1]:.6f}")
+
+        if hasattr(self, 'current_model') and self.current_model is not None:
+            self.current_model.selected_features = params.get("selected_features", ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"])
 
         return self.current_model, data
