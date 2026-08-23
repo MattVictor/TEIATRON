@@ -1,0 +1,6 @@
+PyQt6>=6.5.0
+pyqtgraph>=0.13.3
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.10.0
+pingouin>=0.5.3
