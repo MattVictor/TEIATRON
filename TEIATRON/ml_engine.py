@@ -378,61 +378,115 @@ class ClassificadorMetricas:
         return ((1 + b**2) * prec * rec) / ((b**2 * prec) + rec)
     
 class OptimalBayesMAP(BaseClassifier):
+    @classmethod
+    def get_hyperparameters(cls):
+        return [
+            {"name": "Matriz de Covariância", "type": "options", "choices": ["Individuais (QDA - Curvas)", "Agrupada (LDA - Retas)"], "default": "Individuais (QDA - Curvas)"},
+            {"name": "Probabilidade a Priori", "type": "options", "choices": ["Uniforme (Equiprovável)", "Empírica (Baseada nos Dados)"], "default": "Uniforme (Equiprovável)"}
+        ]
+        
+    def __init__(self):
+        self.classes = []
+        self.parameters = {}
+        self.priors = {}
+
     def train(self, X, y, **kwargs):
         self.classes = np.unique(y)
         self.parameters = {}
+        self.priors = {}
+        
+        tipo_cov = kwargs.get('Matriz de Covariância', 'Individuais (QDA - Curvas)')
+        tipo_prior = kwargs.get('Probabilidade a Priori', 'Uniforme (Equiprovável)')
         
         for c in self.classes:
-            X_c = X[np.array(y) == c]
+            X_c = X[y == c]
             mean = np.mean(X_c, axis=0)
-            # rowvar=False garante que as colunas são variáveis
             cov = np.cov(X_c, rowvar=False) 
-            
-            # Adiciona um pequeno valor à diagonal para evitar matriz singular
-            cov += np.eye(cov.shape[0]) * 1e-6 
-            
             self.parameters[c] = {'mean': mean, 'cov': cov}
             
+            if "Empírica" in tipo_prior:
+                self.priors[c] = len(X_c) / len(X)
+            else:
+                self.priors[c] = 1.0 / len(self.classes)
+                
+        # Lógica para LDA (Agrupada): Tirar média ponderada das matrizes de covariância
+        if "Agrupada" in tipo_cov:
+            pooled_cov = np.zeros((X.shape[1], X.shape[1]))
+            for c in self.classes:
+                X_c = X[y == c]
+                if len(X_c) > 1:
+                    pooled_cov += np.cov(X_c, rowvar=False) * (len(X_c) - 1)
+            pooled_cov /= (len(X) - len(self.classes))
+            # Substituir a cov individual pela agrupada em todas as classes
+            for c in self.classes:
+                self.parameters[c]['cov'] = pooled_cov
+            
+    def _predict_single(self, x):
+        posteriors = []
+        for c in self.classes:
+            mean = self.parameters[c]['mean']
+            cov = self.parameters[c]['cov']
+            prior = self.priors[c]
+            
+            try:
+                inv_cov = np.linalg.inv(cov)
+                det_cov = np.linalg.det(cov)
+                if det_cov <= 0: det_cov = 1e-10
+            except:
+                inv_cov = np.eye(len(mean))
+                det_cov = 1e-10
+                
+            diff = x - mean
+            
+            term1 = -0.5 * np.log(det_cov)
+            term2 = -0.5 * np.dot(np.dot(diff.T, inv_cov), diff)
+            term3 = np.log(prior) # Inclusão do Prior
+            
+            posterior = term1 + term2 + term3
+            posteriors.append(posterior)
+            
+        return self.classes[np.argmax(posteriors)]
+
     def predict(self, X):
         X = np.array(X)
         if X.ndim == 1:
             X = X.reshape(1, -1)
             
-        preds = []
-        for x in X:
-            posteriors = []
-            for c in self.classes:
-                mean = self.parameters[c]['mean']
-                cov = self.parameters[c]['cov']
-                
-                inv_cov = np.linalg.inv(cov)
-                det_cov = np.linalg.det(cov)
-                diff = x - mean
-                
-                term1 = -0.5 * np.log(det_cov)
-                term2 = -0.5 * np.dot(np.dot(diff.T, inv_cov), diff)
-                
-                posterior = term1 + term2
-                posteriors.append(posterior)
-            preds.append(self.classes[np.argmax(posteriors)])
-        return preds[0] if len(preds) == 1 else np.array(preds)
+        preds = np.array([self._predict_single(x) for x in X])
+        
+        if len(preds) == 1:
+            return preds[0]
+        return preds
 
     def get_decision_surface(self, classe_i, classe_j):
-        """Retorna W, w e w0 para a fronteira quadrática entre duas classes."""
         m_i = self.parameters[classe_i]['mean']
         cov_i = self.parameters[classe_i]['cov']
-        inv_cov_i = np.linalg.inv(cov_i)
-        
+        try:
+            inv_cov_i = np.linalg.inv(cov_i)
+        except:
+            inv_cov_i = np.eye(len(m_i))
+            
         m_j = self.parameters[classe_j]['mean']
         cov_j = self.parameters[classe_j]['cov']
-        inv_cov_j = np.linalg.inv(cov_j)
+        try:
+            inv_cov_j = np.linalg.inv(cov_j)
+        except:
+            inv_cov_j = np.eye(len(m_j))
+            
+        prior_i = self.priors[classe_i]
+        prior_j = self.priors[classe_j]
         
+        # W = -0.5 * (InvCov_i - InvCov_j) -> Se for LDA (covariâncias iguais), W será matriz nula (0)
         W = -0.5 * (inv_cov_i - inv_cov_j)
         w = np.dot(inv_cov_i, m_i) - np.dot(inv_cov_j, m_j)
         
         term_w0_1 = -0.5 * (np.dot(np.dot(m_i.T, inv_cov_i), m_i) - np.dot(np.dot(m_j.T, inv_cov_j), m_j))
-        term_w0_2 = -0.5 * np.log(np.linalg.det(cov_i) / np.linalg.det(cov_j))
-        w0 = term_w0_1 + term_w0_2
+        det_cov_i = max(np.linalg.det(cov_i), 1e-10)
+        det_cov_j = max(np.linalg.det(cov_j), 1e-10)
+        term_w0_2 = -0.5 * np.log(det_cov_i / det_cov_j)
+        term_w0_3 = np.log(prior_i) - np.log(prior_j) # Prior adicionado
+        
+        w0 = term_w0_1 + term_w0_2 + term_w0_3
         
         return W, w, w0
 
@@ -480,50 +534,81 @@ class OptimalBayesMAP(BaseClassifier):
                         vec[idx_y] = yv
                         for k, h_i in enumerate(hid_idx):
                             vec[h_i] = hid_vals[k]
-                        val = np.dot(vec.T, np.dot(W, vec)) + np.dot(w.T, vec) + w0
+                            
+                        # d(x) = x^T * W * x + w^T * x + w0
+                        # Se W for 0 (LDA), vira eq. de reta!
+                        val = np.dot(np.dot(vec.T, W), vec) + np.dot(w.T, vec) + w0
                         Z[idx_i, idx_j] = val
                         
                 contours.append({
                     "Z": Z, "level": 0.0, "x_min": x_min, "x_max": x_max, 
                     "y_min": y_min, "y_max": y_max, "res": res, 
-                    "name": f"Fronteira {c1}x{c2}"
+                    "name": f"Fronteira {c1} x {c2}"
                 })
                 
         return {"contours": contours}
 
 # =====================================================================
-# CLASSIFICADOR NAIVE BAYES - MAP
+# CLASSIFICADOR NAIVE BAYES - REGRA MAP
 # =====================================================================
+
 class NaiveBayesMAP(BaseClassifier):
+    @classmethod
+    def get_hyperparameters(cls):
+        return [
+            {"name": "Probabilidade a Priori", "type": "options", "choices": ["Uniforme (Equiprovável)", "Empírica (Baseada nos Dados)"], "default": "Uniforme (Equiprovável)"}
+        ]
+        
+    def __init__(self):
+        self.classes = []
+        self.parameters = {}
+        self.priors = {}
+
     def train(self, X, y, **kwargs):
         self.classes = np.unique(y)
         self.parameters = {}
+        self.priors = {}
+        
+        tipo_prior = kwargs.get('Probabilidade a Priori', 'Uniforme (Equiprovável)')
         
         for c in self.classes:
-            X_c = X[np.array(y) == c]
+            X_c = X[y == c]
             mean = np.mean(X_c, axis=0)
-            var = np.var(X_c, axis=0) + 1e-6 # Evita divisão por zero
+            var = np.var(X_c, axis=0)
+            # Evitar variância 0
+            var[var == 0] = 1e-9
             self.parameters[c] = {'mean': mean, 'var': var}
             
+            if "Empírica" in tipo_prior:
+                self.priors[c] = len(X_c) / len(X)
+            else:
+                self.priors[c] = 1.0 / len(self.classes)
+            
+    def _predict_single(self, x):
+        posteriors = []
+        for c in self.classes:
+            mean = self.parameters[c]['mean']
+            var = self.parameters[c]['var']
+            prior = self.priors[c]
+            
+            term1 = -0.5 * np.sum(np.log(2 * np.pi * var))
+            term2 = -0.5 * np.sum(((x - mean) ** 2) / var)
+            term3 = np.log(prior) # Inclusão do Prior
+            
+            posterior = term1 + term2 + term3
+            posteriors.append(posterior)
+            
+        return self.classes[np.argmax(posteriors)]
+
     def predict(self, X):
         X = np.array(X)
         if X.ndim == 1:
             X = X.reshape(1, -1)
             
-        preds = []
-        for x in X:
-            posteriors = []
-            for c in self.classes:
-                mean = self.parameters[c]['mean']
-                var = self.parameters[c]['var']
-                
-                term1 = -0.5 * np.sum(np.log(2 * np.pi * var))
-                term2 = -0.5 * np.sum(((x - mean) ** 2) / var)
-                
-                posterior = term1 + term2
-                posteriors.append(posterior)
-            preds.append(self.classes[np.argmax(posteriors)])
-        return preds[0] if len(preds) == 1 else np.array(preds)
+        preds = np.array([self._predict_single(x) for x in X])
+        if len(preds) == 1:
+            return preds[0]
+        return preds
 
     def get_decision_surface(self, classe_i, classe_j):
         m_i = self.parameters[classe_i]['mean']
@@ -534,12 +619,17 @@ class NaiveBayesMAP(BaseClassifier):
         var_j = self.parameters[classe_j]['var']
         inv_cov_j = np.diag(1.0 / var_j)
         
+        prior_i = self.priors[classe_i]
+        prior_j = self.priors[classe_j]
+        
         W = -0.5 * (inv_cov_i - inv_cov_j)
         w = np.dot(inv_cov_i, m_i) - np.dot(inv_cov_j, m_j)
         
         term_w0_1 = -0.5 * (np.dot(np.dot(m_i.T, inv_cov_i), m_i) - np.dot(np.dot(m_j.T, inv_cov_j), m_j))
         term_w0_2 = -0.5 * np.sum(np.log(var_i)) + 0.5 * np.sum(np.log(var_j))
-        w0 = term_w0_1 + term_w0_2
+        term_w0_3 = np.log(prior_i) - np.log(prior_j)
+        
+        w0 = term_w0_1 + term_w0_2 + term_w0_3
         
         return W, w, w0
 

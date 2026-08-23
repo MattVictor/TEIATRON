@@ -297,7 +297,7 @@ class AlgorithmExpandedPage(BaseExpandedPage):
             self.update_log_font()
 
     def update_log_font(self):
-        self.log_box.setStyleSheet(f"background-color: #1a1a1a; color: #00FF00; font-family: 'Consolas'; font-size: {{self.log_font_size}}px; border: 1px solid #444; border-radius: 4px; padding: 8px;")
+        self.log_box.setStyleSheet(f"background-color: #1a1a1a; color: #00FF00; font-family: 'Consolas'; font-size: {self.log_font_size}px; border: 1px solid #444; border-radius: 4px; padding: 8px;")
 
     def append_log(self, text):
         self.log_box.append(text)

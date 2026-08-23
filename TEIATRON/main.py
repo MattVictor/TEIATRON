@@ -388,6 +388,7 @@ class MainWindow(QMainWindow):
         def computar_matriz_modelo(modelo):
             matriz = [[0 for _ in range(n)] for _ in range(n)]
             total = 0
+            acertos_lista = []
             for i in range(len(filtered_class_data)):
                 conjunto = filtered_conjunto_data[i]
                 if modo_selecionado == "Apenas Teste" and conjunto != "Teste": continue
@@ -403,16 +404,23 @@ class MainWindow(QMainWindow):
                 
                 real_idx = class_to_idx[real]
                 pred_idx = class_to_idx.get(pred, -1)
+                
+                acertou = False
                 if pred_idx != -1:
                     matriz[real_idx][pred_idx] += 1
-            return matriz, total
+                    if real_idx == pred_idx:
+                        acertou = True
+                acertos_lista.append(acertou)
+                
+            return matriz, total, acertos_lista
 
         # Roda para o modelo ATUAL
-        matriz_atual, total_avaliado = computar_matriz_modelo(self.current_model)
+        matriz_atual, total_avaliado, acertos_atual = computar_matriz_modelo(self.current_model)
 
         if total_avaliado > 0:
             metrics_current = ClassificadorMetricas(matriz_atual)
             metrics_compare = None
+            mcnemar_text = ""
             
             # Tenta carregar e rodar o modelo COMPARADO
             if modelo_comparacao != "Nenhum":
@@ -422,12 +430,26 @@ class MainWindow(QMainWindow):
                         with open(filepath, 'rb') as f:
                             dados = pickle.load(f)
                             modelo_b = dados["model"]
-                            matriz_comp, _ = computar_matriz_modelo(modelo_b)
+                            matriz_comp, _, acertos_comp = computar_matriz_modelo(modelo_b)
                             metrics_compare = ClassificadorMetricas(matriz_comp)
+                            
+                            # Teste de McNemar
+                            n10 = sum(1 for a, b in zip(acertos_atual, acertos_comp) if a and not b)
+                            n01 = sum(1 for a, b in zip(acertos_atual, acertos_comp) if not a and b)
+                            
+                            if n10 + n01 == 0:
+                                mcnemar_text = "McNemar: Empate Perfeito (0 divergências)"
+                            else:
+                                chi_squared = ((abs(n10 - n01) - 1.0) ** 2) / (n10 + n01)
+                                if chi_squared > 3.841: # p < 0.05 para 1 grau de liberdade
+                                    mcnemar_text = f"McNemar: Diferença SIGNIFICATIVA (X² = {chi_squared:.2f} > 3.84)"
+                                else:
+                                    mcnemar_text = f"McNemar: Diferença INSIGNIFICANTE (X² = {chi_squared:.2f} <= 3.84)"
+                                    
                     except:
                         pass # Falhou em ler, ignora comparação
             
-            self.page_accuracy.update_metrics(matriz_atual, classes_unicas, metrics_current, metrics_compare)
+            self.page_accuracy.update_metrics(matriz_atual, classes_unicas, metrics_current, metrics_compare, mcnemar_text)
             
             self.card_accuracy.update_preview(
                 f"[{modo_selecionado}]\nAcerto Geral: {metrics_current.acerto_geral()*100:.2f}%\n"

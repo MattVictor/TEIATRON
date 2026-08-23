@@ -107,20 +107,30 @@ class AccuracyExpandedPage(BaseExpandedPage):
             self.table_metrics.setItem(i, 0, item)
             
         layout_metrics.addWidget(self.table_metrics, stretch=1)
+        
+        self.lbl_mcnemar = QLabel("")
+        self.lbl_mcnemar.setStyleSheet(f"color: {WARNING_COLOR}; font-size: 15px; font-weight: bold; margin-top: 8px;")
+        self.lbl_mcnemar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout_metrics.addWidget(self.lbl_mcnemar)
+        
         splitter.addWidget(pane_metrics)
         
         splitter.setSizes([300, 300]) 
         layout.addWidget(splitter, stretch=1)
         self.add_main_content(container)
 
-    def update_metrics(self, matriz, classes_names, metrics_current, metrics_compare=None):
+    def update_metrics(self, matriz, classes_names, metrics_current, metrics_compare=None, mcnemar_text=""):
         # 1. Atualizar Matriz de Confusão (Mesma lógica de antes)
         n = len(matriz)
         self.table_matrix.setRowCount(n + 1)
         self.table_matrix.setColumnCount(n + 1)
         headers = classes_names + ["Total"]
         self.table_matrix.setHorizontalHeaderLabels([f"Real:\n{h}" for h in headers])
-        self.table_matrix.setVerticalHeaderLabels([f"Pred:\n{h}" for h in headers])
+        self.table_matrix.setVerticalHeaderLabels([f"Pred: {h}" for h in headers])
+        
+        # Correção do corte do texto no cabeçalho vertical
+        self.table_matrix.verticalHeader().setMinimumWidth(150)
+        self.table_matrix.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
 
         for i in range(n):
             soma_linha = sum(matriz[i])
@@ -181,3 +191,5 @@ class AccuracyExpandedPage(BaseExpandedPage):
             item_diff.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.table_metrics.setItem(i, 2, item_comp)
             self.table_metrics.setItem(i, 3, item_diff)
+            
+        self.lbl_mcnemar.setText(mcnemar_text)

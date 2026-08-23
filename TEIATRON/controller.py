@@ -173,11 +173,79 @@ class MLController:
             X_train_np = np.array(X_train)
             y_train_np = np.array(y_train)
             
+            # Executar testes estatísticos sobre a base de dados
+            self.log_callback("\n[ANÁLISE ESTATÍSTICA DO DATASET]")
+            # Helper for Mardia
+            def mardia_test(X_class):
+                n, p = X_class.shape
+                if n < 2: return True, 1.0, 1.0
+                mean = np.mean(X_class, axis=0)
+                cov = np.cov(X_class, rowvar=False)
+                try:
+                    inv_cov = np.linalg.pinv(cov)
+                except:
+                    return True, 1.0, 1.0
+                
+                diff = X_class - mean
+                D = diff @ inv_cov @ diff.T
+                skewness = np.sum(D**3) / (n**2)
+                kurtosis = np.sum(np.diag(D)**2) / n
+                
+                import scipy.stats as st
+                df_skew = p * (p + 1) * (p + 2) / 6.0
+                stat_skew = n * skewness / 6.0
+                pval_skew = 1.0 - st.chi2.cdf(stat_skew, df_skew)
+                
+                mean_kurt = p * (p + 2)
+                var_kurt = 8.0 * p * (p + 2) / n
+                stat_kurt = (kurtosis - mean_kurt) / np.sqrt(var_kurt)
+                pval_kurt = 2.0 * (1.0 - st.norm.cdf(abs(stat_kurt)))
+                
+                return (pval_skew > 0.05 and pval_kurt > 0.05), pval_skew, pval_kurt
+                
+            try:
+                import pingouin as pg
+                import pandas as pd
+                import scipy.stats as st
+                
+                df_X = pd.DataFrame(X_train_np)
+                df_X['class'] = y_train_np
+                classes_presentes = np.unique(y_train_np)
+                
+                # 1. Teste de Normalidade Multivariada (Mardia e Henze-Zirkler)
+                self.log_callback("1. Testes de Normalidade Multivariada:")
+                for c in classes_presentes:
+                    c_data = df_X[df_X['class'] == c].drop(columns=['class'])
+                    if len(c_data) > 0:
+                        # Mardia
+                        is_mardia, p_skew, p_kurt = mardia_test(c_data.values)
+                        self.log_callback(f"  ↳ {c} (Mardia): {'Normal' if is_mardia else 'NÃO Normal'} (p_assimetria={p_skew:.3f}, p_curtose={p_kurt:.3f})")
+                        
+                        # Henze-Zirkler
+                        hz = pg.multivariate_normality(c_data, alpha=0.05)
+                        self.log_callback(f"  ↳ {c} (Henze-Zirkler): {'Normal' if hz.normal else 'NÃO Normal'} (p-valor: {hz.pval:.4f})")
+                
+                # 2. Teste de Homocedasticidade (Box's M Test)
+                if len(classes_presentes) > 1:
+                    try:
+                        box_m = pg.box_m(data=df_X, dvs=df_X.columns[:-1].tolist(), group='class')
+                        pval_box = box_m['pval'][0]
+                        equal_cov = pval_box > 0.05
+                        self.log_callback(f"\n2. Teste M de Box (Igualdade de Covariâncias):")
+                        self.log_callback(f"  ↳ Covariâncias {'Iguais (LDA recomendado)' if equal_cov else 'DIFERENTES (QDA recomendado)'} (p-valor: {pval_box:.4f})")
+                    except Exception as e:
+                        pass
+                        
+            except ImportError:
+                self.log_callback("  (Bibliotecas 'pingouin', 'pandas' e 'scipy' não instaladas. Rode 'pip install pingouin scipy pandas')")
+                
+            
             if algo_name == "Bayes Ótimo":
                 self.current_model = OptimalBayesMAP()
-                self.current_model.train(X_train_np, y_train_np)
+                self.current_model.train(X_train_np, y_train_np, **params)
                 self.log_callback("\n[TREINAMENTO BAYES ÓTIMO CONCLUÍDO]")
-                self.log_callback("Distribuições Gausianas Multivariadas calculadas.")
+                self.log_callback(f"Prior: {params.get('Probabilidade a Priori', 'Uniforme (Equiprovável)')}")
+                self.log_callback(f"Covariância: {params.get('Matriz de Covariância', 'Individuais (QDA - Curvas)')}")
                 
                 classes_treinadas = self.current_model.classes
                 if len(classes_treinadas) >= 2:
@@ -193,9 +261,9 @@ class MLController:
                             
             elif algo_name == "Naive Bayes":
                 self.current_model = NaiveBayesMAP()
-                self.current_model.train(X_train_np, y_train_np)
+                self.current_model.train(X_train_np, y_train_np, **params)
                 self.log_callback("\n[TREINAMENTO NAIVE BAYES CONCLUÍDO]")
-                self.log_callback("Médias e Variâncias calculadas (assumindo independência).")
+                self.log_callback(f"Prior: {params.get('Probabilidade a Priori', 'Uniforme (Equiprovável)')}")
 
         elif algo_name == "Rede Neural (MLP)":
             self.current_model = NeuralNetworkClassifier()
