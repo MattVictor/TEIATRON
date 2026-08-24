@@ -429,30 +429,59 @@ class MainWindow(QMainWindow):
             metrics_compare = None
             mcnemar_text = ""
             
-            # Tenta carregar e rodar o modelo COMPARADO
+            # Tenta treinar e rodar o modelo COMPARADO no mesmo dataset atual
             if modelo_comparacao != "Nenhum":
-                filepath = os.path.join(self.models_dir, f"{modelo_comparacao}.pkl")
-                if os.path.exists(filepath):
+                from core.controller import MLController, MODEL_MAP
+                if modelo_comparacao in MODEL_MAP:
                     try:
-                        with open(filepath, 'rb') as f:
-                            dados = pickle.load(f)
-                            modelo_b = dados["model"]
-                            matriz_comp, _, acertos_comp = computar_matriz_modelo(modelo_b)
-                            metrics_compare = ClassificadorMetricas(matriz_comp)
+                        # Controller silencioso para treinar em background
+                        dummy_ctrl = MLController(lambda x: None)
+                        
+                        params = {"Algoritmo": modelo_comparacao}
+                        metadata = dummy_ctrl.get_algorithm_metadata(modelo_comparacao)
+                        for p in metadata:
+                            params[p['name']] = p.get('default')
                             
-                            # Teste de McNemar
-                            n10 = sum(1 for a, b in zip(acertos_atual, acertos_comp) if a and not b)
-                            n01 = sum(1 for a, b in zip(acertos_atual, acertos_comp) if not a and b)
+                        if modelo_comparacao == "Perceptron":
+                            params["Classe Alvo"] = classes_unicas[0] if len(classes_unicas) > 0 else ""
+                            params["is_ova"] = False
+                        elif modelo_comparacao == "Máquina de Vetores de Suporte (SVM)":
+                            params["Classe 1"] = classes_unicas[0] if len(classes_unicas) > 0 else ""
+                            params["Classe 2"] = classes_unicas[1] if len(classes_unicas) > 1 else params["Classe 1"]
+                            params["Classe Alvo"] = classes_unicas[0] if len(classes_unicas) > 0 else ""
+                            params["is_ova"] = False
                             
-                            if n10 + n01 == 0:
-                                mcnemar_text = "McNemar: Empate Perfeito (0 divergências)"
+                        # Passamos os mesmos dados exatos que o modelo atual foi treinado (o current eval_data inteiro)
+                        # Treinar retorna: (modelo, dados_modificados)
+                        modelo_b, _ = dummy_ctrl.train_model(
+                            self.eval_data["dataset"], 
+                            self.eval_data["classes"], 
+                            self.eval_data["conjuntos"], 
+                            params
+                        )
+                        
+                        # Setamos as features para garantir
+                        modelo_b.selected_features = getattr(self.current_model, 'selected_features', keys)
+                        
+                        matriz_comp, _, acertos_comp = computar_matriz_modelo(modelo_b)
+                        metrics_compare = ClassificadorMetricas(matriz_comp)
+                        
+                        # Teste de McNemar
+                        n10 = sum(1 for a, b in zip(acertos_atual, acertos_comp) if a and not b)
+                        n01 = sum(1 for a, b in zip(acertos_atual, acertos_comp) if not a and b)
+                        
+                        if n10 + n01 == 0:
+                            mcnemar_text = "McNemar: Empate Perfeito (0 divergências)"
+                        else:
+                            chi_squared = ((abs(n10 - n01) - 1.0) ** 2) / (n10 + n01)
+                            if chi_squared > 3.841: # p < 0.05 para 1 grau de liberdade
+                                mcnemar_text = f"McNemar: Diferença SIGNIFICATIVA (X² = {chi_squared:.2f} > 3.84)"
                             else:
-                                chi_squared = ((abs(n10 - n01) - 1.0) ** 2) / (n10 + n01)
-                                if chi_squared > 3.841: # p < 0.05 para 1 grau de liberdade
-                                    mcnemar_text = f"McNemar: Diferença SIGNIFICATIVA (X² = {chi_squared:.2f} > 3.84)"
-                                else:
-                                    mcnemar_text = f"McNemar: Diferença INSIGNIFICANTE (X² = {chi_squared:.2f} <= 3.84)"
-                                    
+                                mcnemar_text = f"McNemar: Diferença INSIGNIFICANTE (X² = {chi_squared:.2f} <= 3.84)"
+                                
+                    except Exception as e:
+                        print(f"Erro ao treinar modelo comparativo: {e}")
+                        pass 
                     except:
                         pass # Falhou em ler, ignora comparação
             
@@ -538,12 +567,11 @@ class MainWindow(QMainWindow):
         self.page_accuracy.combo_compare.clear()
         self.page_accuracy.combo_compare.addItem("Nenhum")
         
-        # 2. Varre a pasta e adiciona os modelos salvos
-        if hasattr(self, 'models_dir') and os.path.exists(self.models_dir):
-            arquivos = [f for f in os.listdir(self.models_dir) if f.endswith(".pkl")]
-            for f in arquivos:
-                nome_limpo = f.replace(".pkl", "")
-                self.page_accuracy.combo_compare.addItem(nome_limpo)
+        # 2. Adiciona os algoritmos disponíveis para comparação dinâmica
+        from core.controller import MODEL_MAP
+        for algo_name in MODEL_MAP.keys():
+            if algo_name != "Problema do XOR":
+                self.page_accuracy.combo_compare.addItem(algo_name)
                 
         # 3. Restaura a seleção se ela ainda existir
         idx = self.page_accuracy.combo_compare.findText(atual_selecionado)
