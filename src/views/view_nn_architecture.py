@@ -120,76 +120,78 @@ class NNDiagramWidget(QWidget):
     def build_network(self, model):
         self.scene.clear()
         
-        if not hasattr(model, 'W_ih') or not model.W_ih:
+        if not hasattr(model, 'weights') or not model.weights:
             return
             
-        W_ih = model.W_ih
-        b_h = model.b_h
-        W_ho = model.W_ho
-        b_o = model.b_o
-        
+        weights = model.weights
+        biases = model.biases
         last_pass = getattr(model, 'last_forward_pass', {})
-        in_acts = last_pass.get("inputs", [])
-        h_acts = last_pass.get("hidden", [])
-        o_acts = last_pass.get("output", [])
+        activations = last_pass.get("activations", [])
         
-        n_inputs = len(W_ih[0]) if len(W_ih) > 0 else 0
-        n_hidden = len(b_h)
-        n_outputs = len(b_o)
+        num_layers = len(weights) + 1
+        if num_layers < 2: return
         
-        if n_inputs == 0: return
-
-        x_in, x_hid, x_out = -300, 0, 300
+        # Calculate horizontal spacing
+        x_start = -400
+        x_end = 400
+        x_step = (x_end - x_start) / (num_layers - 1) if num_layers > 1 else 0
+        
         y_gap = 90
-        
         def get_y_coords(count):
             total_height = (count - 1) * y_gap
             start_y = -total_height / 2
             return [start_y + i * y_gap for i in range(count)]
             
-        y_in = get_y_coords(n_inputs)
-        y_hid = get_y_coords(n_hidden)
-        y_out = get_y_coords(n_outputs)
+        layer_nodes = []
         
-        top_y = min(min(y_in) if y_in else [0], min(y_hid) if y_hid else [0], min(y_out) if y_out else [0]) - 80
-        self.add_layer_label("Entrada", x_in, top_y)
-        self.add_layer_label("Oculta", x_hid, top_y)
-        self.add_layer_label("Saída", x_out, top_y)
-        
-        input_nodes = []
-        for i in range(n_inputs):
-            act = in_acts[i] if i < len(in_acts) else 0.0
-            node = Node(f"In {i+1}", "Entrada", x_in, y_in[i], activation=act)
-            input_nodes.append(node)
-            self.scene.addItem(node)
-            
-        hidden_nodes = []
-        for j in range(n_hidden):
-            act = h_acts[j] if j < len(h_acts) else 0.0
-            bias = b_h[j]
-            node = Node(f"H {j+1}", "Oculta", x_hid, y_hid[j], activation=act, bias=bias)
-            hidden_nodes.append(node)
-            self.scene.addItem(node)
-            
-        output_nodes = []
-        for k in range(n_outputs):
-            act = o_acts[k] if k < len(o_acts) else 0.0
-            bias = b_o[k]
-            name = f"Out {k+1}"
-            if hasattr(model, 'reverse_map') and k in model.reverse_map:
-                name = str(model.reverse_map[k])[:8] 
-            node = Node(name, "Saída", x_out, y_out[k], activation=act, bias=bias)
-            output_nodes.append(node)
-            self.scene.addItem(node)
-            
-        for j in range(n_hidden):
-            for i in range(n_inputs):
-                w = W_ih[j][i]
-                edge = Edge(input_nodes[i], hidden_nodes[j], w)
-                self.scene.addItem(edge)
+        for L in range(num_layers):
+            if L == 0:
+                n_nodes = len(weights[0][0])
+                layer_type = "Entrada"
+                label_text = "Entrada"
+            elif L == num_layers - 1:
+                n_nodes = len(biases[-1])
+                layer_type = "Saída"
+                label_text = "Saída"
+            else:
+                n_nodes = len(biases[L-1])
+                layer_type = "Oculta"
+                label_text = f"Oculta {L}"
                 
-        for k in range(n_outputs):
-            for j in range(n_hidden):
-                w = W_ho[k][j]
-                edge = Edge(hidden_nodes[j], output_nodes[k], w)
-                self.scene.addItem(edge)
+            x_pos = x_start + L * x_step
+            y_coords = get_y_coords(n_nodes)
+            
+            top_y = min(y_coords) - 80 if y_coords else -80
+            self.add_layer_label(label_text, x_pos, top_y)
+            
+            nodes_in_layer = []
+            for i in range(n_nodes):
+                act = activations[L][i] if L < len(activations) and i < len(activations[L]) else 0.0
+                bias = biases[L-1][i] if L > 0 else 0.0
+                
+                if layer_type == "Entrada":
+                    name = f"In {i+1}"
+                elif layer_type == "Saída":
+                    name = f"Out {i+1}"
+                    if hasattr(model, 'reverse_map') and i in model.reverse_map:
+                        name = str(model.reverse_map[i])[:8]
+                else:
+                    name = f"H{L} {i+1}"
+                    
+                node = Node(name, layer_type, x_pos, y_coords[i], activation=act, bias=bias)
+                nodes_in_layer.append(node)
+                self.scene.addItem(node)
+                
+            layer_nodes.append(nodes_in_layer)
+            
+        # Draw edges
+        for L in range(len(weights)):
+            w_layer = weights[L]
+            source_nodes = layer_nodes[L]
+            target_nodes = layer_nodes[L+1]
+            
+            for j in range(len(target_nodes)):
+                for k in range(len(source_nodes)):
+                    w = w_layer[j][k]
+                    edge = Edge(source_nodes[k], target_nodes[j], w)
+                    self.scene.addItem(edge)

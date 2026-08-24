@@ -30,15 +30,15 @@ class PerceptronClassifier(BaseClassifier):
         pesos_iniciais = kwargs.get('pesos_iniciais', [0,0,0,0,0])
         regra_delta = kwargs.get('regra_delta', False)
         # 1. Mapeamento de Classes (Um contra todos ou Binário Clássico)
-        # O alvo vira 1, o resto vira 0.
+        # O alvo vira 1, o resto vira -1.
         self.class_map = {classe_alvo: 1}
         
         # Descobre qual é a segunda classe (se for binário) ou chama de "Resto" (se for OvA)
         outras_classes = [y for y in set(y_train) if y != classe_alvo]
-        nome_classe_zero = outras_classes[0] if len(outras_classes) == 1 else "Resto"
-        self.reverse_map = {1: classe_alvo, 0: nome_classe_zero}
+        nome_classe_negativa = outras_classes[0] if len(outras_classes) == 1 else "Resto"
+        self.reverse_map = {1: classe_alvo, -1: nome_classe_negativa}
         
-        y_mapped = [1 if y == classe_alvo else 0 for y in y_train]
+        y_mapped = [1 if y == classe_alvo else -1 for y in y_train]
         
         self.pesos = list(pesos_iniciais)
         self.historico_erros = []
@@ -53,8 +53,8 @@ class PerceptronClassifier(BaseClassifier):
                 for i in range(len(vetor)):
                     ativacao_continua += self.pesos[i + 1] * vetor[i]
                     
-                # Predição Discreta (Degrau)
-                classe_predita = 1 if ativacao_continua >= 0.0 else 0
+                # Predição Discreta (Degrau) no limiar 0.0
+                classe_predita = 1 if ativacao_continua >= 0.0 else -1
                 
                 if classe_real != classe_predita:
                     erros_de_classificacao += 1
@@ -88,10 +88,7 @@ class PerceptronClassifier(BaseClassifier):
         for i in range(len(novo_ponto)):
             ativacao += self.pesos[i + 1] * novo_ponto[i]
             
-        classe_predita = 1 if ativacao >= 0.0 else 0
+        classe_predita = 1 if ativacao >= 0.0 else -1
         nome_classe = self.reverse_map[classe_predita]
         
         return nome_classe, {"Ativação (Soma Ponderada)": ativacao}
-        
-
-

@@ -269,13 +269,15 @@ class MLController:
             self.current_model = NeuralNetworkClassifier()
             epocas = params.get("Épocas", 10000)
             lr = params.get("Learning Rate", 0.5)
-            hidden = params.get("Neurônios Ocultos", 2)
+            camadas_str = params.get("Camadas Ocultas", "4,4")
+            semente = params.get("Semente Aleatória", 42)
             
             self.current_model.train(
                 X_train, y_train,
                 epocas=epocas,
                 learning_rate=lr,
-                hidden_neurons=hidden,
+                camadas_ocultas=camadas_str,
+                semente_aleatoria=semente,
                 progress_callback=self.log_callback
             )
             
