@@ -3,7 +3,7 @@ import os
 from PyQt6.QtWidgets import (
     QCheckBox, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QDoubleSpinBox, 
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, 
-    QFileDialog, QGridLayout, QMessageBox, QSpinBox
+    QFileDialog, QGridLayout, QMessageBox, QSpinBox, QLineEdit
 )
 from PyQt6.QtCore import Qt, QSettings
 from PyQt6.QtGui import QColor
@@ -52,6 +52,37 @@ class InputCard(BaseCard):
         """)
         msg_box.exec()
 
+
+class BankFloatInput(QLineEdit):
+
+    # Aqui essa classe formata melhor as entradas com os meodos value() e setValue() pra nao quebrar o codigo
+
+    def __init__(self):
+        super().__init__()
+        self.setText("0.0")
+        self._formatting = False
+        self.textChanged.connect(self.format_typing)
+
+    def format_typing(self, text):
+        if self._formatting:
+            return
+        self._formatting = True
+
+        numeros = ''.join(filter(str.isdigit, text))
+        if not numeros:
+            numeros = "0"
+
+        valor = int(numeros) / 10.0
+
+        self.setText(f"{valor:.1f}")
+        self._formatting = False
+
+    def value(self):
+        return float(self.text())
+
+    def setValue(self, val):
+        self.setText(f"{val:.1f}")
+
 class InputExpandedPage(BaseExpandedPage):
     def __init__(self, update_card_callback, on_back_callback, on_import_callback, on_split_callback):
         super().__init__("Entrada de Dados", on_back_callback)
@@ -70,15 +101,18 @@ class InputExpandedPage(BaseExpandedPage):
         labels = ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"]
         
         for i, name in enumerate(labels):
+
+            # Usando a classe nova pra formatar
+
             lbl = QLabel(name)
             lbl.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px;")
-            spin = QDoubleSpinBox()
-            spin.setRange(0.0, 20.0)
-            spin.setSingleStep(0.1)
-            spin.setDecimals(1)
+
+            spin = BankFloatInput()
+
             spin.setStyleSheet(f"background-color: #333; color: {TEXT_PRIMARY}; padding: 6px; font-size: 14px;")
-            spin.valueChanged.connect(self.on_manual_input_change)
-            
+
+            spin.textChanged.connect(self.on_manual_input_change)
+
             self.inputs[name] = spin
             row, col = i // 2, (i % 2) * 2
             grid.addWidget(lbl, row, col)
