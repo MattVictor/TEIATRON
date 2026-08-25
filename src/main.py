@@ -401,6 +401,14 @@ class MainWindow(QMainWindow):
         filtered_dataset = self.eval_data["dataset"]
         filtered_class_data = self.eval_data["classes"]
         filtered_conjunto_data = self.eval_data["conjuntos"]
+        
+        # --- FALLBACK AUTOMÁTICO PARA DATASETS SEM CONJUNTO DE TESTE ---
+        if modo_selecionado == "Apenas Teste" and "Teste" not in filtered_conjunto_data:
+            modo_selecionado = "Todos os Dados"
+            self.page_accuracy.combo_mode.blockSignals(True)
+            self.page_accuracy.combo_mode.setCurrentText("Todos os Dados")
+            self.page_accuracy.combo_mode.blockSignals(False)
+            
         keys = self.controller.get_current_features()
 
         classes_unicas = list(sorted(set(filtered_class_data)))

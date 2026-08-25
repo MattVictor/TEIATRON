@@ -74,8 +74,8 @@ class DataManager:
             test_idx = shuffled.index[split_idx:]
             df.loc[test_idx, self.conjunto_col] = "Teste"
             
-        # Reordenar para embaralhar a exibição (opcional, mas bom)
-        df = df.sample(frac=1).reset_index(drop=True)
+        # Ordenar por Classe e Conjunto para melhor visualização na tabela UI
+        df = df.sort_values(by=[self.target_column, self.conjunto_col]).reset_index(drop=True)
         
         self.raw_data = df[self.headers]
         data_matrix = self.raw_data.astype(str).values.tolist()
@@ -139,6 +139,13 @@ class DataManager:
                 ponto = [dataset[k][i] for k in selected_features]
                 X_train.append(ponto)
                 y_train.append(classe_exibicao)
+
+        # Embaralhar os dados de treino para evitar viés sequencial no aprendizado
+        combined_train = list(zip(X_train, y_train))
+        if combined_train:
+            random.shuffle(combined_train)
+            X_train, y_train = zip(*combined_train)
+            X_train, y_train = list(X_train), list(y_train)
 
         return {
             'filtered_dataset': filtered_dataset,

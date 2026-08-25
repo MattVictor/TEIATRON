@@ -83,6 +83,7 @@ class NeuralNetworkClassifier(BaseClassifier):
             self.biases.append(b)
             
         self.historico_erros = []
+        paciencia = max(10, epocas // 100)
         
         for epoca in range(epocas):
             erros_classificacao = 0
@@ -129,7 +130,19 @@ class NeuralNetworkClassifier(BaseClassifier):
             
             step = max(1, epocas // 10)
             if progress_callback and (epoca + 1) % step == 0:
-                progress_callback(f"  » Progresso: {epoca + 1}/{epocas} épocas concluídas... ({erros_classificacao} erros na atual)")
+                progress_callback(f"  • Progresso: {epoca + 1}/{epocas} épocas concluídas... ({erros_classificacao} erros na atual)")
+                
+            # --- EARLY STOPPING ---
+            # Se a rede zerar os erros, aguardamos mais algumas épocas (paciência)
+            # apenas para garantir uma margem de confiança melhor nos pesos antes de parar.
+            if erros_classificacao == 0:
+                paciencia -= 1
+                if paciencia <= 0:
+                    if progress_callback:
+                        progress_callback(f"  » Parada Antecipada (Early Stopping) na época {epoca+1}: 0 erros de classificação!")
+                    break
+            else:
+                paciencia = max(10, epocas // 100) # Reset da paciência
 
     def predict(self, novo_ponto):
         if not self.weights:

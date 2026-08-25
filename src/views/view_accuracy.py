@@ -63,14 +63,14 @@ class AccuracyExpandedPage(BaseExpandedPage):
         layout_matrix.setContentsMargins(0, 10, 0, 0)
 
         lbl_matrix = QLabel("Matriz de Confusão (Modelo Atual):")
-        lbl_matrix.setStyleSheet(f"color: {ACCENT_COLOR}; font-size: 16px; font-weight: bold;")
+        lbl_matrix.setStyleSheet(f"color: {ACCENT_COLOR}; font-size: 18px; font-weight: bold;")
         layout_matrix.addWidget(lbl_matrix)
 
         self.table_matrix = QTableWidget(1, 1)
         self.table_matrix.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_matrix.setStyleSheet(f"""
-            QTableWidget {{ background-color: #2b2b2b; color: {TEXT_PRIMARY}; gridline-color: #555; border: 1px solid #444; }}
-            QHeaderView::section {{ background-color: #1a1a1a; color: {ACCENT_COLOR}; font-weight: bold; padding: 4px; border: 1px solid #444; }}
+            QTableWidget {{ background-color: #2b2b2b; color: {TEXT_PRIMARY}; gridline-color: #555; border: 1px solid #444; font-size: 15px; }}
+            QHeaderView::section {{ background-color: #1a1a1a; color: {ACCENT_COLOR}; font-weight: bold; padding: 6px; border: 1px solid #444; font-size: 15px; }}
         """)
         self.table_matrix.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         layout_matrix.addWidget(self.table_matrix, stretch=1)
@@ -82,7 +82,7 @@ class AccuracyExpandedPage(BaseExpandedPage):
         layout_metrics.setContentsMargins(0, 10, 0, 0)
         
         lbl_metrics = QLabel("Quadro Comparativo de Desempenho:")
-        lbl_metrics.setStyleSheet(f"color: {ACCENT_COLOR}; font-size: 16px; font-weight: bold;")
+        lbl_metrics.setStyleSheet(f"color: {ACCENT_COLOR}; font-size: 18px; font-weight: bold;")
         layout_metrics.addWidget(lbl_metrics)
 
         self.metrics_names = [
@@ -96,8 +96,8 @@ class AccuracyExpandedPage(BaseExpandedPage):
         
         # Cor amarela solicitada para o texto da tabela de métricas
         self.table_metrics.setStyleSheet(f"""
-            QTableWidget {{ background-color: #1E1E1E; color: #FFFF00; gridline-color: #555; border: 1px solid #444; font-family: 'Consolas'; font-size: 13px; font-weight: bold; }}
-            QHeaderView::section {{ background-color: #1a1a1a; color: {ACCENT_COLOR}; font-weight: bold; padding: 4px; border: 1px solid #444; }}
+            QTableWidget {{ background-color: #1E1E1E; color: #FFFF00; gridline-color: #555; border: 1px solid #444; font-family: 'Consolas'; font-size: 15px; font-weight: bold; }}
+            QHeaderView::section {{ background-color: #1a1a1a; color: {ACCENT_COLOR}; font-weight: bold; padding: 6px; border: 1px solid #444; font-size: 15px; }}
         """)
         self.table_metrics.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         

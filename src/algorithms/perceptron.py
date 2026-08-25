@@ -63,6 +63,7 @@ class PerceptronClassifier(BaseClassifier):
         
         self.pesos = list(pesos_iniciais)
         self.historico_erros = []
+        paciencia = max(10, epocas // 100)
         
         # 2. Loop de Treinamento
         for epoca in range(epocas):
@@ -95,9 +96,13 @@ class PerceptronClassifier(BaseClassifier):
             # Salva histórico para o Gráfico de Épocas
             self.historico_erros.append(erros_de_classificacao)
             
-            # Condição de parada antecipada
-            if erros_de_classificacao == 0 and not regra_delta:
-                break
+            # --- EARLY STOPPING ---
+            if erros_de_classificacao == 0:
+                paciencia -= 1
+                if paciencia <= 0:
+                    break
+            else:
+                paciencia = max(10, epocas // 100) # Reset da paciência
                 
         return self.pesos
 
