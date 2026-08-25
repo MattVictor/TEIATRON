@@ -103,7 +103,7 @@ class InputExpandedPage(BaseExpandedPage):
         lbl_pct.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px; font-weight: bold;")
         
         self.spin_pct = QSpinBox()
-        self.spin_pct.setRange(1, 99)
+        self.spin_pct.setRange(1, 100)
         self.spin_pct.setValue(70) # Padrão 80% Treino / 20% Teste
         self.spin_pct.setStyleSheet(f"background-color: #333; color: {TEXT_PRIMARY}; padding: 6px; font-size: 14px; font-weight: bold;")
 

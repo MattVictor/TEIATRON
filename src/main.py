@@ -487,18 +487,35 @@ class MainWindow(QMainWindow):
                         matriz_comp, _, acertos_comp = computar_matriz_modelo(modelo_b)
                         metrics_compare = ClassificadorMetricas(matriz_comp)
                         
-                        # Teste de McNemar
-                        n10 = sum(1 for a, b in zip(acertos_atual, acertos_comp) if a and not b)
-                        n01 = sum(1 for a, b in zip(acertos_atual, acertos_comp) if not a and b)
+                        # Teste Z sobre Coeficientes de Kappa e Tau (Congalton and Green, 2009)
+                        k1 = metrics_current.coeficiente_kappa()
+                        k2 = metrics_compare.coeficiente_kappa()
+                        var_k1 = metrics_current.variancia_kappa()
+                        var_k2 = metrics_compare.variancia_kappa()
                         
-                        if n10 + n01 == 0:
-                            mcnemar_text = "McNemar: Empate Perfeito (0 divergências)"
+                        tau1 = metrics_current.coeficiente_tau()
+                        tau2 = metrics_compare.coeficiente_tau()
+                        var_tau1 = metrics_current.variancia_tau()
+                        var_tau2 = metrics_compare.variancia_tau()
+                        
+                        sum_var_k = var_k1 + var_k2
+                        sum_var_tau = var_tau1 + var_tau2
+                        
+                        if sum_var_k > 0:
+                            z_k = abs(k1 - k2) / (sum_var_k ** 0.5)
+                            sig_k = "SIGNIFICATIVA" if z_k > 1.96 else "INSIGNIFICANTE"
+                            z_k_str = f"Z(Kappa)={z_k:.2f} [{sig_k}]"
                         else:
-                            chi_squared = ((abs(n10 - n01) - 1.0) ** 2) / (n10 + n01)
-                            if chi_squared > 3.841: # p < 0.05 para 1 grau de liberdade
-                                mcnemar_text = f"McNemar: Diferença SIGNIFICATIVA (X² = {chi_squared:.2f} > 3.84)"
-                            else:
-                                mcnemar_text = f"McNemar: Diferença INSIGNIFICANTE (X² = {chi_squared:.2f} <= 3.84)"
+                            z_k_str = "Z(Kappa)=Empate perfeito"
+                            
+                        if sum_var_tau > 0:
+                            z_tau = abs(tau1 - tau2) / (sum_var_tau ** 0.5)
+                            sig_tau = "SIGNIFICATIVA" if z_tau > 1.96 else "INSIGNIFICANTE"
+                            z_tau_str = f"Z(Tau)={z_tau:.2f} [{sig_tau}]"
+                        else:
+                            z_tau_str = "Z(Tau)=Empate perfeito"
+                            
+                        mcnemar_text = f"Significância (p<0.05 | Z_crítico=1.96):\n {z_k_str} | {z_tau_str}"
                                 
                     except Exception as e:
                         print(f"Erro ao treinar modelo comparativo: {e}")

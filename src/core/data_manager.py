@@ -123,9 +123,9 @@ class DataManager:
                     continue
 
             if is_ova:
-                classe_exibicao = "Classe 1" if classe_atual == alvo else "Classe 0"
+                classe_exibicao = alvo if classe_atual == alvo else "Resto"
                 if classe_atual != alvo:
-                    if len([c for c in filtered_class_data if c == "Classe 0"]) >= len([c for c in filtered_class_data if c == "Classe 1"]):
+                    if len([c for c in filtered_class_data if c == "Resto"]) >= len([c for c in filtered_class_data if c == alvo]):
                         if random.random() > 0.5:
                             continue
 

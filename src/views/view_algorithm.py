@@ -62,7 +62,7 @@ class AlgorithmExpandedPage(BaseExpandedPage):
         top_layout.setContentsMargins(0, 0, 10, 0) # Margem direita para acomodar a barra de rolagem
         
         self.combo_algo = QComboBox()
-        self.combo_algo.addItems(["Distância Mínima", "Distância Máxima", "Perceptron", "Rede Neural (MLP)", "Problema do XOR", "Bayes Ótimo", "Naive Bayes","Máquina de Vetores de Suporte (SVM)"])
+        self.combo_algo.addItems(["Distância Mínima", "Distância Máxima", "Perceptron", "Rede Neural (MLP)", "Bayes Ótimo", "Naive Bayes","Máquina de Vetores de Suporte (SVM)"])
         self.combo_algo.setStyleSheet(f"QComboBox {{ background-color: #333; color: {TEXT_PRIMARY}; padding: 8px; font-size: 16px; border-radius: 4px; }}")
         self.combo_algo.currentIndexChanged.connect(self.build_dynamic_form)
         

@@ -92,7 +92,7 @@ class MLController:
             
             self.current_model.train(
                 X_train, y_train, 
-                classe_alvo="Classe 1" if is_ova else c1, 
+                classe_alvo=alvo if is_ova else c1, 
                 epocas=epocas, 
                 learning_rate=lr, 
                 pesos_iniciais=pesos_list, 
@@ -222,14 +222,19 @@ class MLController:
                 self.log_callback("1. Testes de Normalidade Multivariada:")
                 for c in classes_presentes:
                     c_data = df_X[df_X['class'] == c].drop(columns=['class'])
-                    if len(c_data) > 0:
-                        # Mardia
-                        is_mardia, p_skew, p_kurt = mardia_test(c_data.values)
-                        self.log_callback(f"  ↳ {c} (Mardia): {'Normal' if is_mardia else 'NÃO Normal'} (p_assimetria={p_skew:.3f}, p_curtose={p_kurt:.3f})")
-                        
-                        # Henze-Zirkler
-                        hz = pg.multivariate_normality(c_data, alpha=0.05)
-                        self.log_callback(f"  ↳ {c} (Henze-Zirkler): {'Normal' if hz.normal else 'NÃO Normal'} (p-valor: {hz.pval:.4f})")
+                    if len(c_data) >= 3:
+                        try:
+                            # Mardia
+                            is_mardia, p_skew, p_kurt = mardia_test(c_data.values)
+                            self.log_callback(f"  • {c} (Mardia): {'Normal' if is_mardia else 'NÃO Normal'} (p_assimetria={p_skew:.3f}, p_curtose={p_kurt:.3f})")
+                            
+                            # Henze-Zirkler
+                            hz = pg.multivariate_normality(c_data, alpha=0.05)
+                            self.log_callback(f"  • {c} (Henze-Zirkler): {'Normal' if hz.normal else 'NÃO Normal'} (p-valor: {hz.pval:.4f})")
+                        except Exception as e:
+                            self.log_callback(f"  • {c}: Erro no teste de normalidade ({str(e)})")
+                    else:
+                        self.log_callback(f"  • {c}: Amostras insuficientes para normalidade (n={len(c_data)}). Mínimo exigido: 3.")
                 
                 # 2. Teste de Homocedasticidade (Box's M Test)
                 if len(classes_presentes) > 1:

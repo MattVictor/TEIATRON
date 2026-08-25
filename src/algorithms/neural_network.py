@@ -7,10 +7,10 @@ class NeuralNetworkClassifier(BaseClassifier):
     @classmethod
     def get_hyperparameters(cls):
         return [
-            {"name": "Épocas", "type": "int", "min": 1, "max": 100000, "default": 10000},
-            {"name": "Learning Rate", "type": "float", "min": 0.0001, "max": 10.0, "default": 0.5},
+            {"name": "Épocas", "type": "int", "min": 1, "max": 100000, "default": 1000},
+            {"name": "Learning Rate", "type": "float", "min": 0.0001, "max": 10.0, "default": 0.05},
             {"name": "Camadas Ocultas", "type": "string", "default": "4,4"},
-            {"name": "Semente Aleatória", "type": "int", "min": 0, "max": 99999, "default": 42}
+            {"name": "Semente Aleatória", "type": "int", "min": 0, "max": 99999, "default": 67}
         ]
 
     def __init__(self):
@@ -38,9 +38,9 @@ class NeuralNetworkClassifier(BaseClassifier):
         return norm_x
 
     def train(self, X_train, y_train, **kwargs):
-        epocas = kwargs.get('epocas', 10000)
-        lr = kwargs.get('learning_rate', 0.5)
-        semente = kwargs.get('semente_aleatoria', 42)
+        epocas = kwargs.get('epocas', 1000)
+        lr = kwargs.get('learning_rate', 0.05)
+        semente = kwargs.get('semente_aleatoria', 67)
         camadas_str = kwargs.get('camadas_ocultas', '4,4')
         progress_callback = kwargs.get('progress_callback', None)
         
