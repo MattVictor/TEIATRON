@@ -183,8 +183,9 @@ class MainWindow(QMainWindow):
         self.page_input = InputExpandedPage(
             self.card_input.update_preview_text, 
             lambda: self.stack.setCurrentIndex(0),
-            on_import_callback=lambda f: self.controller.handle_load_csv(f),
-            on_split_callback=lambda s, tr: self.controller.handle_split_data(s, tr)
+            on_import_callback=lambda f, target: self.controller.handle_load_csv(f, target),
+            on_split_callback=lambda s, tr: self.controller.handle_split_data(s, tr),
+            on_dataset_ready=self.on_dataset_ready_handler
         )
         self.page_charts = ChartsExpandedPage(self.card_charts.preview_plot, lambda: self.stack.setCurrentIndex(0))
         
@@ -193,7 +194,8 @@ class MainWindow(QMainWindow):
             self.card_algo.update_preview_text, 
             lambda: self.stack.setCurrentIndex(0), 
             self.train_model,
-            get_metadata_callback=lambda algo: self.controller.get_algorithm_metadata(algo)
+            get_metadata_callback=lambda algo: self.controller.get_algorithm_metadata(algo),
+            get_classes_callback=lambda: self.controller.get_current_classes()
         )
         
         # Onde estava: self.page_accuracy = AccuracyExpandedPage(...)
@@ -209,6 +211,24 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.page_algo)     # Index 3
         self.stack.addWidget(self.page_accuracy) # Index 4
     
+    def on_dataset_ready_handler(self):
+        """Disparado quando o dataset é carregado e validado com sucesso."""
+        features = self.controller.get_current_features()
+        classes = self.controller.get_current_classes()
+        
+        # 1. Regenerar Inputs e Checkboxes
+        self.page_input.generate_inputs_panel(features)
+        self.page_input.generate_feature_checkboxes(features)
+        if hasattr(self.page_input, 'input_panel'):
+            self.page_input.input_panel.setVisible(True)
+            
+        # 2. Atualizar Checkboxes de Gráficos (Eixos)
+        self.page_charts.generate_feature_checkboxes(features)
+            
+        # 3. Atualizar Parâmetros de Algoritmos (para Perceptron e SVM)
+        # Recarregar formulário da aba de algoritmos
+        self.page_algo.combo_algo.currentIndexChanged.emit(self.page_algo.combo_algo.currentIndex())
+
     def train_model(self):
         self.page_algo.clear_logs()
         
@@ -285,17 +305,12 @@ class MainWindow(QMainWindow):
             msg.setText(f"Modelo treinado com sucesso!\n\n{resumo_acc}")
             
         except Exception as e:
-            # ... resto do seu código (except) ...
-            
-            msg = QMessageBox(self)
-            msg.setWindowTitle("Treinamento Concluído")
-            msg.setText("Modelo treinado com sucesso!")
-            
-        except Exception as e:
-            self.page_algo.append_log(f"[ERRO CRÍTICO] {e}")
+            import traceback
+            tb = traceback.format_exc()
+            self.page_algo.append_log(f"[ERRO CRÍTICO] {e}\n{tb}")
             msg = QMessageBox(self)
             msg.setWindowTitle("Treinamento Interrompido")
-            msg.setText(f"{e}")
+            msg.setText(f"{e}\n(Veja o terminal de logs para detalhes)")
             
         msg.setStyleSheet("""
                 QMessageBox { background-color: #1E1E1E; color: #FFFFFF; }
@@ -311,7 +326,8 @@ class MainWindow(QMainWindow):
 
         current_inputs = self.page_input.get_current_inputs()
         
-        selected_features = getattr(self.current_model, 'selected_features', ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"])
+        fallback_features = self.controller.get_current_features()
+        selected_features = getattr(self.current_model, 'selected_features', fallback_features)
         ponto = [current_inputs[k] for k in selected_features]
         
         # Chama a matemática pura
@@ -385,7 +401,7 @@ class MainWindow(QMainWindow):
         filtered_dataset = self.eval_data["dataset"]
         filtered_class_data = self.eval_data["classes"]
         filtered_conjunto_data = self.eval_data["conjuntos"]
-        keys = ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"]
+        keys = self.controller.get_current_features()
 
         classes_unicas = list(sorted(set(filtered_class_data)))
         n = len(classes_unicas)
@@ -438,14 +454,19 @@ class MainWindow(QMainWindow):
                         dummy_ctrl = MLController(lambda x: None)
                         
                         params = {"Algoritmo": modelo_comparacao}
+                        
+                        # Garante que o modelo comparativo use as mesmas features!
+                        current_features = getattr(self.current_model, 'selected_features', self.controller.get_current_features())
+                        params["selected_features"] = current_features
+                        
                         metadata = dummy_ctrl.get_algorithm_metadata(modelo_comparacao)
                         for p in metadata:
                             params[p['name']] = p.get('default')
                             
-                        if modelo_comparacao == "Perceptron":
-                            params["Classe Alvo"] = classes_unicas[0] if len(classes_unicas) > 0 else ""
-                            params["is_ova"] = False
-                        elif modelo_comparacao == "Máquina de Vetores de Suporte (SVM)":
+                        # Importante: repassar a instância de DataManager para que a filtragem funcione
+                        dummy_ctrl.data_manager = self.controller.data_manager
+                        
+                        if modelo_comparacao in ["Perceptron", "Máquina de Vetores de Suporte (SVM)", "Problema do XOR"]:
                             params["Classe 1"] = classes_unicas[0] if len(classes_unicas) > 0 else ""
                             params["Classe 2"] = classes_unicas[1] if len(classes_unicas) > 1 else params["Classe 1"]
                             params["Classe Alvo"] = classes_unicas[0] if len(classes_unicas) > 0 else ""

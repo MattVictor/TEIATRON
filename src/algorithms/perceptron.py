@@ -22,6 +22,19 @@ class PerceptronClassifier(BaseClassifier):
         self.class_map = {}
         self.reverse_map = {}
         self.historico_erros = []
+        self.feature_mins = []
+        self.feature_maxs = []
+
+    def _normalize(self, x):
+        if not self.feature_mins: return x
+        norm_x = []
+        for i in range(len(x)):
+            rng = self.feature_maxs[i] - self.feature_mins[i]
+            if rng == 0:
+                norm_x.append(0.0)
+            else:
+                norm_x.append((x[i] - self.feature_mins[i]) / rng)
+        return norm_x
 
     def train(self, X_train, y_train, **kwargs):
         classe_alvo = kwargs.get('classe_alvo')
@@ -29,6 +42,14 @@ class PerceptronClassifier(BaseClassifier):
         learning_rate = kwargs.get('learning_rate', 0.01)
         pesos_iniciais = kwargs.get('pesos_iniciais', [0,0,0,0,0])
         regra_delta = kwargs.get('regra_delta', False)
+        
+        # --- NORMALIZAÇÃO ---
+        n_inputs = len(X_train[0]) if len(X_train) > 0 else 0
+        if n_inputs > 0:
+            self.feature_mins = [min(X_train[i][j] for i in range(len(X_train))) for j in range(n_inputs)]
+            self.feature_maxs = [max(X_train[i][j] for i in range(len(X_train))) for j in range(n_inputs)]
+            X_train = [self._normalize(x) for x in X_train]
+            
         # 1. Mapeamento de Classes (Um contra todos ou Binário Clássico)
         # O alvo vira 1, o resto vira -1.
         self.class_map = {classe_alvo: 1}
@@ -84,6 +105,8 @@ class PerceptronClassifier(BaseClassifier):
         if not self.pesos:
             raise Exception("O modelo ainda não foi treinado.")
             
+        novo_ponto = self._normalize(novo_ponto)
+        
         ativacao = self.pesos[0]
         for i in range(len(novo_ponto)):
             ativacao += self.pesos[i + 1] * novo_ponto[i]

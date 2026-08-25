@@ -81,12 +81,11 @@ class ChartsExpandedPage(BaseExpandedPage):
         lbl_vars.setStyleSheet(f"color: {ACCENT_COLOR}; font-weight: bold; margin-top: 10px;")
         left_layout.addWidget(lbl_vars)
 
+        self.vars_layout = QVBoxLayout()
+        left_layout.addLayout(self.vars_layout)
+        
         self.checkboxes = []
-        for var_name in ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"]:
-            chk = QCheckBox(var_name)
-            chk.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px; padding: 2px;")
-            self.checkboxes.append(chk)
-            left_layout.addWidget(chk)
+        self.generate_feature_checkboxes(["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"])
 
         self.btn_plot = QPushButton("Plotar gráfico")
         self.btn_plot.setStyleSheet(f"""
@@ -204,6 +203,18 @@ class ChartsExpandedPage(BaseExpandedPage):
         if current_row >= 0:
             self.display_chart(current_row)
 
+    def generate_feature_checkboxes(self, features):
+        for chk in self.checkboxes:
+            self.vars_layout.removeWidget(chk)
+            chk.deleteLater()
+            
+        self.checkboxes = []
+        for var_name in features:
+            chk = QCheckBox(var_name)
+            chk.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px; padding: 2px;")
+            self.checkboxes.append(chk)
+            self.vars_layout.addWidget(chk)
+            
     def display_chart(self, index):
         if index < 0 or index >= self.list_widget.count():
             return

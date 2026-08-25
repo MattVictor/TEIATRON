@@ -19,10 +19,23 @@ class NeuralNetworkClassifier(BaseClassifier):
         self.biases = []
         self.reverse_map = {}
         self.last_forward_pass = {"activations": []}
+        self.feature_mins = []
+        self.feature_maxs = []
 
     def sigmoid(self, x):
         if x < -700: return 0.0
         return 1 / (1 + math.exp(-x))
+        
+    def _normalize(self, x):
+        if not self.feature_mins: return x
+        norm_x = []
+        for i in range(len(x)):
+            rng = self.feature_maxs[i] - self.feature_mins[i]
+            if rng == 0:
+                norm_x.append(0.0)
+            else:
+                norm_x.append((x[i] - self.feature_mins[i]) / rng)
+        return norm_x
 
     def train(self, X_train, y_train, **kwargs):
         epocas = kwargs.get('epocas', 10000)
@@ -36,6 +49,12 @@ class NeuralNetworkClassifier(BaseClassifier):
             if not hidden_layers: hidden_layers = [4, 4]
         except:
             hidden_layers = [4, 4]
+            
+        n_inputs = len(X_train[0]) if len(X_train) > 0 else 0
+        if n_inputs > 0:
+            self.feature_mins = [min(X_train[i][j] for i in range(len(X_train))) for j in range(n_inputs)]
+            self.feature_maxs = [max(X_train[i][j] for i in range(len(X_train))) for j in range(n_inputs)]
+            X_train = [self._normalize(x) for x in X_train]
             
         random.seed(semente)
         np.random.seed(semente)
@@ -115,6 +134,8 @@ class NeuralNetworkClassifier(BaseClassifier):
     def predict(self, novo_ponto):
         if not self.weights:
             raise Exception("Modelo ainda não treinado.")
+            
+        novo_ponto = self._normalize(novo_ponto)
         
         activations = [novo_ponto]
         for w_layer, b_layer in zip(self.weights, self.biases):

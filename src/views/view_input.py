@@ -53,38 +53,24 @@ class InputCard(BaseCard):
         msg_box.exec()
 
 class InputExpandedPage(BaseExpandedPage):
-    def __init__(self, update_card_callback, on_back_callback, on_import_callback, on_split_callback):
+    def __init__(self, update_card_callback, on_back_callback, on_import_callback, on_split_callback, on_dataset_ready=None):
         super().__init__("Entrada de Dados", on_back_callback)
         self.update_card_callback = update_card_callback
         self.on_import_callback = on_import_callback
         self.on_split_callback = on_split_callback
+        self.on_dataset_ready = on_dataset_ready
         self.current_class = None
         
         container = QWidget()
         layout = QVBoxLayout(container)
 
         # --- PAINEL DE INPUTS MANUAIS ---
-        input_panel = QWidget()
-        grid = QGridLayout(input_panel)
+        self.input_panel = QWidget()
+        self.input_grid = QGridLayout(self.input_panel)
         self.inputs = {}
-        labels = ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"]
-        
-        for i, name in enumerate(labels):
-            lbl = QLabel(name)
-            lbl.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px;")
-            spin = QDoubleSpinBox()
-            spin.setRange(0.0, 20.0)
-            spin.setSingleStep(0.1)
-            spin.setDecimals(1)
-            spin.setStyleSheet(f"background-color: #333; color: {TEXT_PRIMARY}; padding: 6px; font-size: 14px;")
-            spin.valueChanged.connect(self.on_manual_input_change)
-            
-            self.inputs[name] = spin
-            row, col = i // 2, (i % 2) * 2
-            grid.addWidget(lbl, row, col)
-            grid.addWidget(spin, row, col + 1)
-            
-        layout.addWidget(input_panel)
+        layout.addWidget(self.input_panel)
+
+        self.generate_inputs_panel(["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"])
 
         # --- BOTÃO IMPORTAR ---
         btn_import = QPushButton("📂 Importar Dataset (.csv)")
@@ -143,17 +129,15 @@ class InputExpandedPage(BaseExpandedPage):
         feature_layout.setContentsMargins(0, 10, 0, 0)
         
         lbl_feat = QLabel("Usar Características:")
+        lbl_feat = QLabel("Features Ativas:")
         lbl_feat.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px; font-weight: bold;")
         feature_layout.addWidget(lbl_feat)
         
+        self.feature_layout = feature_layout
         self.feature_checkboxes = {}
-        for name in labels:
-            chk = QCheckBox(name)
-            chk.setChecked(True)
-            chk.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px;")
-            self.feature_checkboxes[name] = chk
-            feature_layout.addWidget(chk)
-            
+        # Inicialmente cria com Iris para compatibilidade caso abra sem carregar CSV
+        self.generate_feature_checkboxes(["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"])
+        
         feature_layout.addStretch()
         layout.addWidget(feature_panel)
 
@@ -163,14 +147,6 @@ class InputExpandedPage(BaseExpandedPage):
     def get_selected_features(self):
         return [name for name, chk in self.feature_checkboxes.items() if chk.isChecked()]
 
-    def get_current_inputs(self):
-        """Coleta os 4 valores que estão atualmente digitados nas caixas de input."""
-        return {
-            "Sepal Length": self.inputs["Sepal Length"].value(),
-            "Sepal Width": self.inputs["Sepal Width"].value(),
-            "Petal Length": self.inputs["Petal Length"].value(),
-            "Petal Width": self.inputs["Petal Width"].value()
-        }
 
     # ==========================================
     # LÓGICA DE DADOS
@@ -205,13 +181,39 @@ class InputExpandedPage(BaseExpandedPage):
 
     def _do_load_csv(self, file_path):
         try:
-            headers, data = self.on_import_callback(file_path)
+            import pandas as pd
+            df = pd.read_csv(file_path, nrows=0) # Ler apenas os cabeçalhos
+            cols = df.columns.tolist()
+            
+            if not cols:
+                raise Exception("O CSV parece estar vazio ou não possui cabeçalhos.")
+                
+            from PyQt6.QtWidgets import QInputDialog
+            target_col, ok = QInputDialog.getItem(
+                self, "Selecionar Variável Alvo", 
+                "Qual coluna representa a CLASSE (Target) do dataset?", 
+                cols, len(cols)-1, False
+            )
+            
+            if not ok or not target_col:
+                return # Usuário cancelou
+                
+            headers, data = self.on_import_callback(file_path, target_col)
             
             # Aleatorização Automática solicitada pelo usuário
             train_ratio = self.spin_pct.value() / 100.0
             headers, data = self.on_split_callback(True, train_ratio) # True = Stratified
             
             self.render_table(headers, data)
+            
+            # Ocultar painel de input manual pois os campos antigos não valem mais
+            if hasattr(self, 'input_panel'):
+                self.input_panel.setVisible(False)
+                
+            if hasattr(self, 'on_dataset_ready') and self.on_dataset_ready:
+                self.on_dataset_ready()
+                
+            QMessageBox.information(self, "Sucesso", f"Dataset carregado e separado com alvo: {target_col}")
         except Exception as e:
             QMessageBox.critical(self, "Erro de Importação", str(e))
 
@@ -220,6 +222,51 @@ class InputExpandedPage(BaseExpandedPage):
         headers, data = self.on_split_callback(stratified, train_ratio)
         self.render_table(headers, data)
 
+    def generate_feature_checkboxes(self, feature_names):
+        # Clear old checkboxes
+        for name, chk in self.feature_checkboxes.items():
+            self.feature_layout.removeWidget(chk)
+            chk.deleteLater()
+            
+        self.feature_checkboxes = {}
+        # Insert them before the stretch at the end
+        # Remove the stretch temporarily
+        item = self.feature_layout.takeAt(self.feature_layout.count() - 1)
+        
+        for name in feature_names:
+            chk = QCheckBox(name)
+            chk.setChecked(True)
+            chk.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px;")
+            self.feature_checkboxes[name] = chk
+            self.feature_layout.addWidget(chk)
+            
+        if item:
+            self.feature_layout.addItem(item)
+
+    def generate_inputs_panel(self, feature_names):
+        # Clear existing layout
+        while self.input_grid.count():
+            item = self.input_grid.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+                
+        self.inputs = {}
+        for i, name in enumerate(feature_names):
+            lbl = QLabel(name)
+            lbl.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px;")
+            spin = QDoubleSpinBox()
+            spin.setRange(-100000.0, 100000.0)
+            spin.setSingleStep(0.1)
+            spin.setDecimals(4)
+            spin.setStyleSheet(f"background-color: #333; color: {TEXT_PRIMARY}; padding: 6px; font-size: 14px;")
+            spin.valueChanged.connect(self.on_manual_input_change)
+            
+            self.inputs[name] = spin
+            row, col = i // 2, (i % 2) * 2
+            self.input_grid.addWidget(lbl, row, col)
+            self.input_grid.addWidget(spin, row, col + 1)
+            
     def render_table(self, headers, all_data):
         """Apenas renderiza a matriz de dados na tabela (Visão Passiva)."""
         if not all_data:
@@ -243,39 +290,46 @@ class InputExpandedPage(BaseExpandedPage):
                         
                 self.table.setItem(i, j, item)
 
+    def get_current_inputs(self):
+        return {name: spin.value() for name, spin in self.inputs.items()}
+
     def on_table_double_click(self, row, column):
-        col_count = self.table.columnCount()
         self._ignore_manual = True
 
         try:
-            keys = ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"]
+            keys = list(self.inputs.keys())
             for i, key in enumerate(keys):
-                if i < col_count:
-                    raw_text = self.table.item(row, i).text()
+                raw_text = self.table.item(row, i).text()
+                try:
                     val = float(raw_text.replace(',', '.'))
                     self.inputs[key].setValue(val)
+                except ValueError:
+                    pass
 
-            # Para capturar a classe, consideramos a 5ª coluna ou a penúltima caso 'Conjunto' tenha sido criado
-            if col_count >= 6:
-                self.current_class = self.table.item(row, 4).text()
-            elif col_count >= 5:
-                self.current_class = self.table.item(row, 4).text()
+            target_idx = len(keys)
+            if self.table.columnCount() > target_idx:
+                self.current_class = self.table.item(row, target_idx).text()
             else:
                 self.current_class = None
                 
-        except ValueError:
+        except Exception:
             pass
         finally:
             del self._ignore_manual
             self.sync_to_card()
 
     def sync_to_card(self):
-        sl = self.inputs["Sepal Length"].value()
-        sw = self.inputs["Sepal Width"].value()
-        pl = self.inputs["Petal Length"].value()
-        pw = self.inputs["Petal Width"].value()
-
-        preview = f"SL: {sl:.1f}  |  SW: {sw:.1f}\nPL: {pl:.1f}  |  PW: {pw:.1f}"
+        preview = ""
+        for i, (name, spin) in enumerate(self.inputs.items()):
+            short_name = "".join([word[0] for word in name.split()[:2]]).upper()
+            if not short_name: short_name = name[:2].upper()
+            
+            preview += f"{short_name}: {spin.value():.1f} | "
+            if (i + 1) % 2 == 0:
+                preview = preview[:-2] + "\n"
+                
+        preview = preview.strip()
+        if preview.endswith("|"): preview = preview[:-1].strip()
         
         if self.current_class:
             preview += f"\n\nClasse Real: {self.current_class}"

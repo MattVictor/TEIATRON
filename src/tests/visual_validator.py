@@ -1,5 +1,5 @@
 import numpy as np
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QApplication
+from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel
 import pyqtgraph as pg
 
 # Matplotlib integration
@@ -10,20 +10,15 @@ from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from sklearn.inspection import DecisionBoundaryDisplay
 from sklearn.preprocessing import LabelEncoder
-from sklearn.base import BaseEstimator, ClassifierMixin
 
-import os
-import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from core.plot_engine import PlotEngine
-
-from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
+# TEIATRON PlotEngine
+from ..core.plot_engine import PlotEngine
 
 class VisualValidator(QWidget):
     def __init__(self, teiatron_model, sklearn_model, X, y, class_names, feature_names):
         super().__init__()
         self.setWindowTitle("Validação Visual Lado-a-Lado (PyQtGraph vs Matplotlib)")
-        self.resize(1100, 600)
+        self.resize(1000, 600)
         
         self.teiatron_model = teiatron_model
         self.sklearn_model = sklearn_model
@@ -32,8 +27,8 @@ class VisualValidator(QWidget):
         self.y = y
         self.class_names = class_names
         self.feature_names = feature_names
-        self.le = LabelEncoder().fit(self.y)
         
+        # Assume first 2 features for 2D plot for simplicity, or we slice
         self.x_idx = 0
         self.y_idx = 1
         
@@ -51,17 +46,14 @@ class VisualValidator(QWidget):
         left_layout.addWidget(lbl_left)
         left_layout.addWidget(self.pg_plot)
         
-        # Right Side (Matplotlib NATIVE)
+        # Right Side (Matplotlib)
         right_layout = QVBoxLayout()
         lbl_right = QLabel("Scikit-Learn (Matplotlib / Gabarito)")
         lbl_right.setStyleSheet("font-weight: bold; font-size: 14px; color: #FF5252;")
         self.mpl_canvas = FigureCanvas(Figure(figsize=(5, 5)))
         self.ax = self.mpl_canvas.figure.subplots()
-        self.toolbar = NavigationToolbar(self.mpl_canvas, self) # Toolbar nativa para zoom/pan!
-        
         right_layout.addWidget(lbl_right)
         right_layout.addWidget(self.mpl_canvas)
-        right_layout.addWidget(self.toolbar)
         
         layout.addLayout(left_layout)
         layout.addLayout(right_layout)
@@ -77,10 +69,13 @@ class VisualValidator(QWidget):
         self.pg_plot.getAxis('bottom').setLabel(x_key)
         self.pg_plot.getAxis('left').setLabel(y_key)
         
+        # Mock dataset structure needed by PlotEngine (fixes other features to their mean)
         dataset_mock = {name: self.X[:, i] for i, name in enumerate(self.feature_names)}
+        
         unique_classes = list(sorted(set(self.y)))
         colors = ['#FF5252', '#00E5FF', '#69F0AE', '#FFD740']
         
+        # Draw Points
         for i, cls in enumerate(unique_classes):
             idx = np.where(np.array(self.y) == cls)[0]
             brush = pg.mkBrush(color=colors[i % len(colors)])
@@ -95,6 +90,7 @@ class VisualValidator(QWidget):
             'y_data': y_data
         }
         
+        # Draw Mathematics
         plot_data = PlotEngine.get_plot_data(self.teiatron_model, **kwargs)
         for pt in plot_data.get("points", []):
             self.pg_plot.plot([pt["x"]], [pt["y"]], pen=None, symbol=pt["symbol"], symbolPen=pg.mkPen(color=pt["color"], width=3), symbolSize=pt["size"])
@@ -117,50 +113,42 @@ class VisualValidator(QWidget):
         self.ax.set_xlabel(x_key)
         self.ax.set_ylabel(y_key)
         
-        y_encoded = self.le.transform(self.y)
+        le = LabelEncoder()
+        y_encoded = le.fit_transform(self.y)
+        
         scatter = self.ax.scatter(x_data, y_data, c=y_encoded, cmap='coolwarm', edgecolors='k')
         
+        # Se for um modelo que possui 'predict', o SKLearn suporta desenhar as fronteiras
         if hasattr(self.sklearn_model, "predict"):
             try:
-                # 1. Create a mesh grid
-                x_min, x_max = x_data.min() - 1, x_data.max() + 1
-                y_min, y_max = y_data.min() - 1, y_data.max() + 1
-                # Resolution matches pyqtgraph default or typical grid
-                xx, yy = np.meshgrid(np.linspace(x_min, x_max, 200),
-                                     np.linspace(y_min, y_max, 200))
-                grid_2d = np.c_[xx.ravel(), yy.ravel()]
-                
-                # 2. Fill missing dimensions with means
+                # O problema é que o sklearn espera N dimensões se treinado com N. 
+                # Precisamos de um wrapper que fixa as dimensões nulas na média para plotar a fronteira 2D.
                 if self.X.shape[1] > 2:
-                    means = np.mean(self.X, axis=0)
-                    X_full = np.tile(means, (grid_2d.shape[0], 1))
-                    X_full[:, self.x_idx] = grid_2d[:, 0]
-                    X_full[:, self.y_idx] = grid_2d[:, 1]
+                    class Wrapper:
+                        def __init__(self, model, X_full, x_idx, y_idx):
+                            self.model = model
+                            self.means = np.mean(X_full, axis=0)
+                            self.x_idx = x_idx
+                            self.y_idx = y_idx
+                            self.classes_ = model.classes_
+                        def predict(self, X_2d):
+                            X_full = np.tile(self.means, (X_2d.shape[0], 1))
+                            X_full[:, self.x_idx] = X_2d[:, 0]
+                            X_full[:, self.y_idx] = X_2d[:, 1]
+                            return self.model.predict(X_full)
+                    model_to_plot = Wrapper(self.sklearn_model, self.X, self.x_idx, self.y_idx)
                 else:
-                    X_full = grid_2d
-                
-                # 3. Predict and encode
-                preds = self.sklearn_model.predict(X_full)
-                Z = self.le.transform(preds).reshape(xx.shape)
-                
-                # 4. Draw Background
-                self.ax.contourf(xx, yy, Z, alpha=0.4, cmap='coolwarm')
-                
-                # 5. Draw Lines
-                num_classes = len(np.unique(y_encoded))
-                c_levels = np.arange(num_classes) + 0.5
-                self.ax.contour(xx, yy, Z, levels=c_levels, linewidths=1.5, linestyles='dashed', colors='k')
-                
+                    model_to_plot = self.sklearn_model
+                    
+                DecisionBoundaryDisplay.from_estimator(
+                    model_to_plot, 
+                    np.column_stack((x_data, y_data)), 
+                    response_method="predict", 
+                    alpha=0.4, 
+                    ax=self.ax,
+                    cmap='coolwarm'
+                )
             except Exception as e:
                 print(f"[Matplotlib] Não foi possível desenhar a fronteira: {e}")
-                import traceback
-                traceback.print_exc()
                 
         self.mpl_canvas.draw()
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    setup_pyqtgraph() 
-    window = VisualValidator()
-    window.show()
-    sys.exit(app.exec())

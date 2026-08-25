@@ -30,10 +30,11 @@ class AlgorithmCard(BaseCard):
         self.preview_label.setText(text)
 
 class AlgorithmExpandedPage(BaseExpandedPage):
-    def __init__(self, update_card_callback, on_back_callback, on_train_callback, get_metadata_callback=None):
+    def __init__(self, update_card_callback, on_back_callback, on_train_callback, get_metadata_callback=None, get_classes_callback=None):
         super().__init__("Configuração de Machine Learning", on_back_callback)
         self.update_card_callback = update_card_callback
         self.get_metadata_callback = get_metadata_callback
+        self.get_classes_callback = get_classes_callback
         self.dynamic_widgets = {}
         self.log_font_size = 13  
         
@@ -139,7 +140,7 @@ class AlgorithmExpandedPage(BaseExpandedPage):
         
         self.dynamic_widgets = {}
         self.widget_metadata = {}
-        classes_iris = ["Iris-setosa", "Iris-versicolor", "Iris-virginica"]
+        dynamic_classes = self.get_classes_callback() if self.get_classes_callback else []
         
         for param in metadata:
             name = param["name"]
@@ -187,7 +188,7 @@ class AlgorithmExpandedPage(BaseExpandedPage):
                 
             elif p_type == "class_selector":
                 widget = QComboBox()
-                widget.addItems(classes_iris)
+                widget.addItems(dynamic_classes)
                 widget.setStyleSheet(f"background-color: #333; color: {TEXT_PRIMARY}; padding: 3px;")
                 if default is not None: widget.setCurrentText(default)
                 widget.currentIndexChanged.connect(self.sync_to_card)

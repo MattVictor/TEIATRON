@@ -125,8 +125,8 @@ class AccuracyExpandedPage(BaseExpandedPage):
         self.table_matrix.setRowCount(n + 1)
         self.table_matrix.setColumnCount(n + 1)
         headers = classes_names + ["Total"]
-        self.table_matrix.setHorizontalHeaderLabels([f"Real:\n{h}" for h in headers])
-        self.table_matrix.setVerticalHeaderLabels([f"Pred: {h}" for h in headers])
+        self.table_matrix.setHorizontalHeaderLabels([f"Pred:\n{h}" for h in headers])
+        self.table_matrix.setVerticalHeaderLabels([f"Real: {h}" for h in headers])
         
         # Correção do corte do texto no cabeçalho vertical
         self.table_matrix.verticalHeader().setMinimumWidth(150)

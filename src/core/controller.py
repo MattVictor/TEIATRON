@@ -30,11 +30,17 @@ class MLController:
             return model_class.get_hyperparameters()
         return []
 
-    def handle_load_csv(self, file_path):
-        return self.data_manager.load_csv(file_path)
+    def handle_load_csv(self, file_path, target_col):
+        return self.data_manager.load_csv(file_path, target_col)
         
     def handle_split_data(self, stratified, train_ratio):
         return self.data_manager.apply_split(stratified, train_ratio)
+
+    def get_current_features(self):
+        return self.data_manager.feature_names
+        
+    def get_current_classes(self):
+        return self.data_manager.class_names
 
     def train_model(self, dataset, class_data, conjunto_data, params):
         self.log_callback("[SISTEMA] Iniciando preparação dos dados (via Controller)...")
@@ -80,13 +86,13 @@ class MLController:
             epocas = params.get("Épocas", 100)
             lr = params.get("Learning Rate", 0.01)
             
-            c1 = data['c1']
+            c1 = params.get("Classe 1", "")
             alvo = data['alvo']
             is_ova = data['is_ova']
             
             self.current_model.train(
                 X_train, y_train, 
-                classe_alvo=alvo if is_ova else c1, 
+                classe_alvo="Classe 1" if is_ova else c1, 
                 epocas=epocas, 
                 learning_rate=lr, 
                 pesos_iniciais=pesos_list, 
@@ -301,6 +307,6 @@ class MLController:
             self.log_callback(f"Vetores de suporte encontrados: {len(self.current_model.model.support_)}")
 
         if hasattr(self, 'current_model') and self.current_model is not None:
-            self.current_model.selected_features = params.get("selected_features", ["Sepal Length", "Sepal Width", "Petal Length", "Petal Width"])
+            self.current_model.selected_features = params.get("selected_features", self.data_manager.feature_names)
 
         return self.current_model, data
